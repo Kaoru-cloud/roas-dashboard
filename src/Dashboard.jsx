@@ -136,7 +136,6 @@ export default function Dashboard() {
       return pt;
     });
 
-    // 실선→점선 연결: 마지막 완료 포인트 값을 점선에도 복사
     top.forEach(c => {
       METRICS.forEach(m => {
         let lastOkIdx = -1;
@@ -152,11 +151,11 @@ export default function Dashboard() {
     return { topCampaigns: top, chartData: chart };
   }, [rows, startDate, endDate, topN, selCh, selApp, selOS, showNoise]);
 
-  const ChartView = ({ mk }) => {
+  const renderChart = (mk) => {
     const m = METRICS.find(x=>x.key===mk);
     if (!m || !selMetrics.includes(mk)) return null;
     return (
-      <div className="mb-10">
+      <div key={mk} className="mb-10">
         <div className="flex items-center gap-3 mb-1">
           <h3 className="text-sm font-bold text-gray-800">월별 {m.label} ROAS</h3>
           <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">완료: ~{maxMonths[mk]||'N/A'}</span>
@@ -169,13 +168,13 @@ export default function Dashboard() {
             <YAxis stroke="#9ca3af" style={{fontSize:'11px'}} tickFormatter={v=>(v*100).toFixed(0)+'%'} />
             <Tooltip contentStyle={{backgroundColor:'#fff',border:'1px solid #e5e7eb',borderRadius:'8px',fontSize:'11px'}}
               itemSorter={(a, b) => (b.value || 0) - (a.value || 0)}
-              formatter={(v,name,_,_2,payload) => {
-                if (v == null || v < 0.01) return null;
+              formatter={(v,name,entry,idx,payload) => {
+                if (v == null || v < 0.01) return ['',''];
                 const cn = name.split('__')[0];
                 const isInc = name.endsWith('__inc');
                 if (isInc) {
                   const hasComplete = payload?.some(p => p.dataKey?.endsWith('__c') && p.dataKey?.startsWith(cn+'__') && p.value != null && p.value >= 0.01);
-                  if (hasComplete) return null;
+                  if (hasComplete) return ['',''];
                 }
                 return [`${(v*100).toFixed(1)}%`, cn];
               }} />
@@ -186,11 +185,11 @@ export default function Dashboard() {
             {topCampaigns.map((c,i) => (
               <React.Fragment key={c.name}>
                 <Line type="monotone" dataKey={`${c.name}__${mk}__c`} stroke={COLORS[i%COLORS.length]}
-                  strokeWidth={2} dot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={3} fill={props.stroke} /> : null}
+                  strokeWidth={2} dot={false} activeDot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={4} fill={props.stroke} /> : <circle r={0} />}
                   connectNulls name={`${c.name}__${mk}__complete`} />
                 <Line type="monotone" dataKey={`${c.name}__${mk}__i`} stroke={COLORS[i%COLORS.length]}
                   strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.3}
-                  dot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={2} fill={props.stroke} opacity={0.3} /> : null}
+                  dot={false} activeDot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={3} fill={props.stroke} opacity={0.3} /> : <circle r={0} />}
                   connectNulls legendType="none" name={`${c.name}__${mk}__inc`} />
               </React.Fragment>
             ))}
@@ -362,7 +361,7 @@ export default function Dashboard() {
 
         {chartData.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            {METRICS.map(m => <ChartView key={m.key} mk={m.key} />)}
+            {METRICS.map(m => renderChart(m.key))}
           </div>
         )}
 
