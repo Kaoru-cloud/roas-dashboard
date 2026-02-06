@@ -361,8 +361,8 @@ export default function Dashboard() {
                           <div className="w-3 h-3 rounded-full" style={{backgroundColor:COLORS[i%COLORS.length]}} />
                           <span className="text-xs font-bold text-gray-400">#{i+1}</span>
                         </div>
-                        <p className="text-xs font-medium text-gray-800 truncate mb-0.5" title={c.name}>
-                          {c.name.length>35?c.name.substring(0,35)+'...':c.name}
+                        <p className="text-xs font-medium text-gray-800 break-all mb-0.5">
+                          {c.name}
                         </p>
                         <p className="text-sm font-bold text-gray-700">{(c.cost/1e6).toFixed(1)}M</p>
                       </div>
