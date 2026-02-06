@@ -136,6 +136,7 @@ export default function Dashboard() {
       return pt;
     });
 
+    // 실선→점선 연결: 마지막 완료 포인트 값을 점선에도 복사
     top.forEach(c => {
       METRICS.forEach(m => {
         let lastOkIdx = -1;
@@ -166,17 +167,31 @@ export default function Dashboard() {
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="month" stroke="#9ca3af" style={{fontSize:'11px'}} />
             <YAxis stroke="#9ca3af" style={{fontSize:'11px'}} tickFormatter={v=>(v*100).toFixed(0)+'%'} />
-            <Tooltip contentStyle={{backgroundColor:'#fff',border:'1px solid #e5e7eb',borderRadius:'8px',fontSize:'11px'}}
-              itemSorter={(a, b) => (b.value || 0) - (a.value || 0)}
-              formatter={(v,name,entry,idx,payload) => {
-                if (v == null || v < 0.01) return ['',''];
-                const cn = name.split('__')[0];
-                const isInc = name.endsWith('__inc');
-                if (isInc) {
-                  const hasComplete = payload?.some(p => p.dataKey?.endsWith('__c') && p.dataKey?.startsWith(cn+'__') && p.value != null && p.value >= 0.01);
-                  if (hasComplete) return ['',''];
-                }
-                return [`${(v*100).toFixed(1)}%`, cn];
+            <Tooltip
+              contentStyle={{backgroundColor:'#fff',border:'1px solid #e5e7eb',borderRadius:'8px',fontSize:'11px'}}
+              content={({active, payload, label}) => {
+                if (!active || !payload) return null;
+                const seen = new Set();
+                const items = payload
+                  .filter(p => p.value != null && p.value >= 0.01)
+                  .filter(p => {
+                    const cn = p.dataKey?.split('__')[0];
+                    if (seen.has(cn)) return false;
+                    seen.add(cn);
+                    return true;
+                  })
+                  .sort((a,b) => (b.value||0) - (a.value||0));
+                if (!items.length) return null;
+                return (
+                  <div style={{backgroundColor:'#fff',border:'1px solid #e5e7eb',borderRadius:8,fontSize:11,padding:'8px 12px'}}>
+                    <p style={{margin:'0 0 4px',fontWeight:600,color:'#374151'}}>{label}</p>
+                    {items.map(p => (
+                      <p key={p.dataKey} style={{margin:'2px 0',color:p.stroke}}>
+                        {p.dataKey?.split('__')[0]}: {(p.value*100).toFixed(1)}%
+                      </p>
+                    ))}
+                  </div>
+                );
               }} />
             <Legend wrapperStyle={{fontSize:'10px',paddingTop:'8px'}} iconType="line"
               payload={topCampaigns.map((c,i) => ({ value: c.name, type:'line', color:COLORS[i%COLORS.length] }))} />
@@ -185,11 +200,11 @@ export default function Dashboard() {
             {topCampaigns.map((c,i) => (
               <React.Fragment key={c.name}>
                 <Line type="monotone" dataKey={`${c.name}__${mk}__c`} stroke={COLORS[i%COLORS.length]}
-                  strokeWidth={2} dot={false} activeDot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={4} fill={props.stroke} /> : <circle r={0} />}
+                  strokeWidth={2} dot={false} activeDot={{r:4}}
                   connectNulls name={`${c.name}__${mk}__complete`} />
                 <Line type="monotone" dataKey={`${c.name}__${mk}__i`} stroke={COLORS[i%COLORS.length]}
                   strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.3}
-                  dot={false} activeDot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={3} fill={props.stroke} opacity={0.3} /> : <circle r={0} />}
+                  dot={false} activeDot={{r:3,strokeOpacity:0.3}}
                   connectNulls legendType="none" name={`${c.name}__${mk}__inc`} />
               </React.Fragment>
             ))}
