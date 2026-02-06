@@ -248,10 +248,12 @@ export default function Dashboard() {
                   const v = row[`${c.name}__${m.key}__v`];
                   const ok = row[`${c.name}__${m.key}__ok`];
                   const txt = v!=null && v>0 ? (v*100).toFixed(1)+'%' : '-';
-                  const clr = v>=1?'text-green-700 font-semibold':v>0.5?'text-amber-700':v>0?'text-red-600':'text-gray-300';
+                  const alpha = v!=null && v>0 ? Math.min(v/1.5, 1)*0.35 : 0;
+                  const bg = alpha > 0 ? `rgba(59,130,246,${alpha.toFixed(2)})` : 'transparent';
                   return (
                     <td key={`${c.name}_${m.key}_${row.month}`}
-                      className={`py-1.5 px-1.5 text-center border-l border-gray-50 ${clr} ${!ok?'opacity-40 italic':''}`}>
+                      className={`py-1.5 px-1.5 text-center border-l border-gray-50 text-gray-800 ${!ok?'opacity-40 italic':''}`}
+                      style={{backgroundColor:bg}}>
                       {txt}
                     </td>
                   );
