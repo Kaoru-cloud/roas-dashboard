@@ -126,9 +126,10 @@ export default function Dashboard() {
         METRICS.forEach(m => {
           const roas = d.cost > 0 ? d[m.key] / d.cost : 0;
           const ok = cohortOk(mo, m.days);
-          pt[`${cn}__${m.key}__c`] = ok ? roas : null;
-          pt[`${cn}__${m.key}__i`] = !ok ? roas : null;
-          pt[`${cn}__${m.key}__v`] = roas;
+          const valid = roas >= 0.01 && d.cost >= 300000;
+          pt[`${cn}__${m.key}__c`] = (ok && valid) ? roas : null;
+          pt[`${cn}__${m.key}__i`] = (!ok && valid) ? roas : null;
+          pt[`${cn}__${m.key}__v`] = valid ? roas : null;
           pt[`${cn}__${m.key}__ok`] = ok;
         });
       });
