@@ -126,7 +126,7 @@ export default function Dashboard() {
         METRICS.forEach(m => {
           const roas = d.cost > 0 ? d[m.key] / d.cost : 0;
           const ok = cohortOk(mo, m.days);
-          const valid = roas >= 0.01 && d.cost >= 300000;
+          const valid = roas >= 0.01 && d.cost >= 1000000;
           pt[`${cn}__${m.key}__c`] = (ok && valid) ? roas : null;
           pt[`${cn}__${m.key}__i`] = (!ok && valid) ? roas : null;
           pt[`${cn}__${m.key}__v`] = valid ? roas : null;
@@ -166,11 +166,17 @@ export default function Dashboard() {
           <LineChart data={chartData} margin={{top:5,right:20,left:10,bottom:5}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="month" stroke="#9ca3af" style={{fontSize:'11px'}} />
-            <YAxis stroke="#9ca3af" style={{fontSize:'11px'}} domain={['auto','auto']} tickFormatter={v=>(v*100).toFixed(0)+'%'} />
+            <YAxis stroke="#9ca3af" style={{fontSize:'11px'}} tickFormatter={v=>(v*100).toFixed(0)+'%'} />
             <Tooltip contentStyle={{backgroundColor:'#fff',border:'1px solid #e5e7eb',borderRadius:'8px',fontSize:'11px'}}
-              formatter={(v,name) => {
-                if (v == null) return ['-', ''];
+              itemSorter={(a, b) => (b.value || 0) - (a.value || 0)}
+              formatter={(v,name,_,_2,payload) => {
+                if (v == null || v < 0.01) return null;
                 const cn = name.split('__')[0];
+                const isInc = name.endsWith('__inc');
+                if (isInc) {
+                  const hasComplete = payload?.some(p => p.dataKey?.endsWith('__c') && p.dataKey?.startsWith(cn+'__') && p.value != null && p.value >= 0.01);
+                  if (hasComplete) return null;
+                }
                 return [`${(v*100).toFixed(1)}%`, cn];
               }} />
             <Legend wrapperStyle={{fontSize:'10px',paddingTop:'8px'}} iconType="line"
@@ -180,10 +186,11 @@ export default function Dashboard() {
             {topCampaigns.map((c,i) => (
               <React.Fragment key={c.name}>
                 <Line type="monotone" dataKey={`${c.name}__${mk}__c`} stroke={COLORS[i%COLORS.length]}
-                  strokeWidth={2} dot={{r:3}} connectNulls
-                  name={`${c.name}__${mk}__complete`} />
+                  strokeWidth={2} dot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={3} fill={props.stroke} /> : null}
+                  connectNulls name={`${c.name}__${mk}__complete`} />
                 <Line type="monotone" dataKey={`${c.name}__${mk}__i`} stroke={COLORS[i%COLORS.length]}
-                  strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.3} dot={{r:2,opacity:0.3}}
+                  strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.3}
+                  dot={(props) => props.value != null && props.value >= 0.01 ? <circle cx={props.cx} cy={props.cy} r={2} fill={props.stroke} opacity={0.3} /> : null}
                   connectNulls legendType="none" name={`${c.name}__${mk}__inc`} />
               </React.Fragment>
             ))}
