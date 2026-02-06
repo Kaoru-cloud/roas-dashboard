@@ -217,52 +217,53 @@ export default function Dashboard() {
   const TableView = () => {
     if (!showTable || !chartData.length || !topCampaigns.length) return null;
     const active = METRICS.filter(m=>selMetrics.includes(m.key));
+    const months = chartData.map(r=>r.month);
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-5 overflow-x-auto">
         <h3 className="text-sm font-bold text-gray-800 mb-3">월별 ROAS 테이블</h3>
         <table className="min-w-full text-xs border-collapse">
           <thead>
             <tr className="border-b-2 border-gray-200">
-              <th className="py-2 px-3 text-left font-semibold text-gray-600 sticky left-0 bg-white z-10">월</th>
-              {topCampaigns.map((c,i)=>(
-                <th key={c.name} colSpan={active.length} className="py-2 px-1 text-center font-semibold border-l border-gray-200"
-                  style={{color:COLORS[i%COLORS.length]}}>
-                  {c.name.length>22 ? c.name.substring(0,22)+'...' : c.name}
+              <th className="py-2 px-3 text-left font-semibold text-gray-600 sticky left-0 bg-white z-10 min-w-[120px]">캠페인</th>
+              <th className="py-2 px-2 text-center font-semibold text-gray-600">지표</th>
+              {months.map(mo=>(
+                <th key={mo} className="py-2 px-1.5 text-center font-medium text-gray-500 border-l border-gray-200 whitespace-nowrap">
+                  {mo}
                 </th>
               ))}
             </tr>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="py-1 px-3 sticky left-0 bg-gray-50 z-10"></th>
-              {topCampaigns.map(c => active.map(m=>(
-                <th key={`${c.name}_${m.key}`} className="py-1 px-1.5 text-center text-gray-500 font-medium border-l border-gray-100 text-xs">
-                  {m.label}
-                </th>
-              )))}
-            </tr>
           </thead>
           <tbody>
-            {chartData.map(row=>(
-              <tr key={row.month} className="border-b border-gray-50 hover:bg-blue-50/50">
-                <td className="py-1.5 px-3 font-medium text-gray-700 sticky left-0 bg-white z-10">{row.month}</td>
-                {topCampaigns.map(c => active.map(m => {
-                  const v = row[`${c.name}__${m.key}__v`];
-                  const ok = row[`${c.name}__${m.key}__ok`];
+            {topCampaigns.map((c,i) => active.map((m,mi) => (
+              <tr key={`${c.name}_${m.key}`} className={`border-b border-gray-50 hover:bg-blue-50/30 ${mi===0?'border-t-2 border-t-gray-200':''}`}>
+                {mi===0 && (
+                  <td rowSpan={active.length} className="py-1.5 px-3 font-medium text-gray-800 sticky left-0 bg-white z-10 align-top border-r border-gray-100"
+                    style={{borderLeftColor:COLORS[i%COLORS.length], borderLeftWidth:3}}>
+                    <span className="text-xs leading-tight break-all">{c.name}</span>
+                    <span className="block text-xs text-gray-400 mt-0.5">{(c.cost/1e6).toFixed(1)}M</span>
+                  </td>
+                )}
+                <td className="py-1.5 px-2 text-center text-gray-500 font-medium whitespace-nowrap border-r border-gray-100">{m.label}</td>
+                {months.map(mo => {
+                  const row = chartData.find(r=>r.month===mo);
+                  const v = row?.[`${c.name}__${m.key}__v`];
+                  const ok = row?.[`${c.name}__${m.key}__ok`];
                   const txt = v!=null && v>0 ? (v*100).toFixed(1)+'%' : '-';
                   const alpha = v!=null && v>0 ? Math.min(v/1.5, 1)*0.35 : 0;
                   const bg = alpha > 0 ? `rgba(59,130,246,${alpha.toFixed(2)})` : 'transparent';
                   return (
-                    <td key={`${c.name}_${m.key}_${row.month}`}
+                    <td key={`${c.name}_${m.key}_${mo}`}
                       className={`py-1.5 px-1.5 text-center border-l border-gray-50 text-gray-800 ${!ok?'opacity-40 italic':''}`}
                       style={{backgroundColor:bg}}>
                       {txt}
                     </td>
                   );
-                }))}
+                })}
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
-        <p className="text-xs text-gray-400 mt-2">* 흐린 이탤릭 = 미완료 코호트 / 초록 &ge;100% / 빨강 &lt;50%</p>
+        <p className="text-xs text-gray-400 mt-2">* 흐린 이탤릭 = 미완료 코호트</p>
       </div>
     );
   };
