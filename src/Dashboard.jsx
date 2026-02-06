@@ -135,6 +135,19 @@ export default function Dashboard() {
       return pt;
     });
 
+    // 실선→점선 연결: 마지막 완료 포인트 값을 점선에도 복사
+    top.forEach(c => {
+      METRICS.forEach(m => {
+        let lastOkIdx = -1;
+        for (let i = 0; i < chart.length; i++) {
+          if (chart[i][`${c.name}__${m.key}__ok`]) lastOkIdx = i;
+        }
+        if (lastOkIdx >= 0 && lastOkIdx < chart.length - 1) {
+          chart[lastOkIdx][`${c.name}__${m.key}__i`] = chart[lastOkIdx][`${c.name}__${m.key}__c`];
+        }
+      });
+    });
+
     return { topCampaigns: top, chartData: chart };
   }, [rows, startDate, endDate, topN, selCh, selApp, selOS, showNoise]);
 
@@ -152,16 +165,15 @@ export default function Dashboard() {
           <LineChart data={chartData} margin={{top:5,right:20,left:10,bottom:5}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="month" stroke="#9ca3af" style={{fontSize:'11px'}} />
-            <YAxis stroke="#9ca3af" style={{fontSize:'11px'}} tickFormatter={v=>(v*100).toFixed(0)+'%'} />
+            <YAxis stroke="#9ca3af" style={{fontSize:'11px'}} domain={['auto','auto']} tickFormatter={v=>(v*100).toFixed(0)+'%'} />
             <Tooltip contentStyle={{backgroundColor:'#fff',border:'1px solid #e5e7eb',borderRadius:'8px',fontSize:'11px'}}
               formatter={(v,name) => {
                 if (v == null) return ['-', ''];
                 const cn = name.split('__')[0];
-                const short = cn.length > 30 ? cn.substring(0,30)+'...' : cn;
-                return [`${(v*100).toFixed(1)}%`, short];
+                return [`${(v*100).toFixed(1)}%`, cn];
               }} />
             <Legend wrapperStyle={{fontSize:'10px',paddingTop:'8px'}} iconType="line"
-              formatter={(val) => { const p=val.split('__')[0]; return p.length>35 ? p.substring(0,35)+'...' : p; }} />
+              payload={topCampaigns.map((c,i) => ({ value: c.name, type:'line', color:COLORS[i%COLORS.length] }))} />
             <ReferenceLine y={1} stroke="#ef4444" strokeDasharray="8 4" strokeWidth={1.5}
               label={{value:'BEP 100%',position:'right',fill:'#ef4444',fontSize:10}} />
             {topCampaigns.map((c,i) => (
