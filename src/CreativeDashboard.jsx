@@ -508,7 +508,7 @@ export default function CreativeDashboard() {
                     {channelsRanked.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-gray-500 mb-1">캠페인 (Spend Top 5)</label>
                   <select multiple value={selCn} onChange={e => setSelCn([...e.target.selectedOptions].map(o => o.value))}
                     className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
