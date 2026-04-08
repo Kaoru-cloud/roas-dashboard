@@ -80,11 +80,14 @@ export default function CreativeDashboard() {
           rev2: parseFloat(r.all_revenue_total_d2) || 0,
         }));
         setRows(cleaned);
-        // Auto-detect date range from data
+        // Auto-detect date range: default to last 7 days of data
         const days = cleaned.map(r => r.day).filter(Boolean).sort();
         if (days.length) {
-          setStartDate(days[0]);
-          setEndDate(days[days.length - 1]);
+          const maxD = days[days.length - 1];
+          const start = new Date(maxD);
+          start.setDate(start.getDate() - 6);
+          setStartDate(start.toISOString().slice(0, 10));
+          setEndDate(maxD);
         }
         // Auto-select top spend channel (excluding Organic) and top spend app
         const chSpend = {};
