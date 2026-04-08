@@ -88,7 +88,8 @@ export default function CreativeDashboard() {
         // Auto-select top spend channel (excluding Organic) and top spend app
         const chSpend = {};
         cleaned.forEach(r => { if (r.ch) chSpend[r.ch] = (chSpend[r.ch] || 0) + r.cost; });
-        const topChs = Object.entries(chSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n).filter(c => c.toLowerCase() !== 'organic');
+        const excludeCh = ['organic', 'google ads'];
+        const topChs = Object.entries(chSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n).filter(c => !excludeCh.includes(c.toLowerCase()));
         setSelCh(topChs);
         const appSpend = {};
         cleaned.forEach(r => { if (r.app) appSpend[r.app] = (appSpend[r.app] || 0) + r.cost; });
@@ -115,7 +116,8 @@ export default function CreativeDashboard() {
     const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
     setSelCh(prev => {
       const valid = prev.filter(c => ranked.includes(c));
-      return valid.length ? valid : ranked.filter(c => c.toLowerCase() !== 'organic');
+      const excludeCh = ['organic', 'google ads'];
+      return valid.length ? valid : ranked.filter(c => !excludeCh.includes(c.toLowerCase()));
     });
     return ranked;
   }, [dateFiltered]);
