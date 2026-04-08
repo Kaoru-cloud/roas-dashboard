@@ -28,11 +28,13 @@ const fmtNum = (v) => {
   return v.toFixed(0);
 };
 
-const fmtCurrency = (v) => {
+// 만원 단위 표시 (원 → 만원 변환)
+const fmtWon = (v) => {
   if (v == null || !isFinite(v)) return '-';
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return v.toFixed(0);
+  const man = v / 10000;
+  if (man >= 10000) return (man / 10000).toFixed(1) + '억';
+  if (man >= 1) return man.toFixed(0) + '만';
+  return v.toFixed(0) + '원';
 };
 
 const truncate = (s, len = 30) => s && s.length > len ? s.slice(0, len) + '...' : s;
@@ -245,12 +247,12 @@ export default function CreativeDashboard() {
           <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={v => sortMetric === 'roas' ? v.toFixed(0) + '%' : fmtNum(v)} />
+              tickFormatter={v => sortMetric === 'installs' ? fmtNum(v) : fmtWon(v)} />
             <YAxis type="category" dataKey="displayName" width={200} stroke="#9ca3af" style={{ fontSize: '10px' }} />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
               formatter={(v, name, props) => {
-                const label = sortMetric === 'roas' ? v.toFixed(1) + '%' : fmtCurrency(v);
+                const label = sortMetric === 'installs' ? fmtNum(v) : fmtWon(v);
                 return [label, metricLabel];
               }}
               labelFormatter={(label) => {
@@ -282,9 +284,9 @@ export default function CreativeDashboard() {
           <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis type="number" dataKey="spend" name="Spend" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={fmtNum} label={{ value: 'Spend', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#9ca3af' }} />
+              tickFormatter={fmtWon} label={{ value: 'Spend', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#9ca3af' }} />
             <YAxis type="number" dataKey="revenue" name="D+2 Revenue" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={fmtNum} label={{ value: 'D+2 Revenue', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11, fill: '#9ca3af' }} />
+              tickFormatter={fmtWon} label={{ value: 'D+2 Revenue', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11, fill: '#9ca3af' }} />
             <ZAxis type="number" dataKey="installs" range={[40, 400]} name="Installs" />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
@@ -294,8 +296,8 @@ export default function CreativeDashboard() {
                 return (
                   <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11, padding: '8px 12px', maxWidth: 300 }}>
                     <p style={{ fontWeight: 600, marginBottom: 4, wordBreak: 'break-all' }}>{d.name}</p>
-                    <p>Spend: {fmtCurrency(d.spend)}</p>
-                    <p>D+2 Revenue: {fmtCurrency(d.revenue)}</p>
+                    <p>Spend: {fmtWon(d.spend)}</p>
+                    <p>D+2 Revenue: {fmtWon(d.revenue)}</p>
                     <p>Installs: {fmtNum(d.installs)}</p>
                     <p>ROAS: {d.spend > 0 ? ((d.revenue / d.spend) * 100).toFixed(1) + '%' : '-'}</p>
                   </div>
@@ -324,7 +326,7 @@ export default function CreativeDashboard() {
           <LineChart data={trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="day" stroke="#9ca3af" style={{ fontSize: '11px' }} />
-            <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={fmtNum} />
+            <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={sortMetric === 'installs' ? fmtNum : fmtWon} />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
               content={({ active, payload, label }) => {
@@ -336,7 +338,7 @@ export default function CreativeDashboard() {
                     <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#374151' }}>{label}</p>
                     {items.map(p => (
                       <p key={p.dataKey} style={{ margin: '2px 0', color: p.stroke }}>
-                        {p.dataKey?.split('__')[0]}: {fmtCurrency(p.value)}
+                        {p.dataKey?.split('__')[0]}: {sortMetric === 'installs' ? fmtNum(p.value) : fmtWon(p.value)}
                       </p>
                     ))}
                   </div>
@@ -388,11 +390,11 @@ export default function CreativeDashboard() {
                   <td className="py-2 px-3 font-medium text-gray-800 break-all text-xs leading-tight max-w-[300px]">
                     {c.name}
                   </td>
-                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtCurrency(c.spend)}</td>
+                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtWon(c.spend)}</td>
                   <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtNum(c.installs)}</td>
-                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtCurrency(c.revenue)}</td>
+                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtWon(c.revenue)}</td>
                   <td className="py-2 px-3 text-right text-gray-700 font-medium">
-                    {isFinite(c.cpi) && c.cpi > 0 ? fmtCurrency(c.cpi) : '-'}
+                    {isFinite(c.cpi) && c.cpi > 0 ? Math.round(c.cpi).toLocaleString() + '원' : '-'}
                   </td>
                   <td className="py-2 px-3 text-right font-bold" style={{ backgroundColor: roasBg }}>
                     {c.spend > 0 ? (c.roas * 100).toFixed(1) + '%' : '-'}
@@ -529,11 +531,11 @@ export default function CreativeDashboard() {
                         </div>
                         <p className="text-xs font-medium text-gray-800 break-all mb-1 leading-tight">{c.name}</p>
                         <div className="flex gap-3 text-xs text-gray-500">
-                          <span>Spend: <b className="text-gray-700">{fmtCurrency(c.spend)}</b></span>
+                          <span>Spend: <b className="text-gray-700">{fmtWon(c.spend)}</b></span>
                           <span>Install: <b className="text-gray-700">{fmtNum(c.installs)}</b></span>
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">
-                          D+2 Rev: <b className="text-gray-700">{fmtCurrency(c.revenue)}</b>
+                          D+2 Rev: <b className="text-gray-700">{fmtWon(c.revenue)}</b>
                         </div>
                       </div>
                     ))}
