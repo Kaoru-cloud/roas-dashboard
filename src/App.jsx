@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Dashboard from './Dashboard'
+import CreativeDashboard from './CreativeDashboard'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -29,10 +30,28 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+const TABS = [
+  { key: 'campaigns', label: 'Campaign ROAS' },
+  { key: 'creatives', label: 'Creative Performance' },
+];
+
 export default function App() {
+  const [page, setPage] = useState('campaigns');
   return (
     <ErrorBoundary>
-      <Dashboard />
+      <nav className="bg-white border-b border-gray-200 px-4 py-2 flex gap-2" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif'}}>
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setPage(t.key)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              page === t.key
+                ? 'bg-blue-50 text-blue-700 border border-blue-300'
+                : 'text-gray-500 hover:bg-gray-100 border border-transparent'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      {page === 'campaigns' ? <Dashboard /> : <CreativeDashboard />}
     </ErrorBoundary>
   )
 }
