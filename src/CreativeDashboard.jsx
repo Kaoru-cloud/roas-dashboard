@@ -191,7 +191,7 @@ export default function CreativeDashboard() {
   const barData = useMemo(() => {
     return [...topCreatives].reverse().map((c, i) => ({
       name: c.name,
-      displayName: truncate(c.name),
+      displayName: c.name,
       value: sortMetric === 'roas' ? c.roas * 100 : c[sortMetric],
       fill: COLORS[(topCreatives.length - 1 - i) % COLORS.length],
     }));
@@ -329,7 +329,7 @@ export default function CreativeDashboard() {
                     <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#374151' }}>{label}</p>
                     {items.map(p => (
                       <p key={p.dataKey} style={{ margin: '2px 0', color: p.stroke }}>
-                        {truncate(p.dataKey?.split('__')[0], 25)}: {fmtCurrency(p.value)}
+                        {p.dataKey?.split('__')[0]}: {fmtCurrency(p.value)}
                       </p>
                     ))}
                   </div>
@@ -337,7 +337,7 @@ export default function CreativeDashboard() {
               }}
             />
             <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }} iconType="line"
-              payload={topCreatives.map((c, i) => ({ value: truncate(c.name, 25), type: 'line', color: COLORS[i % COLORS.length] }))} />
+              payload={topCreatives.map((c, i) => ({ value: c.name, type: 'line', color: COLORS[i % COLORS.length] }))} />
             {topCreatives.map((c, i) => (
               <Line key={c.name} type="monotone" dataKey={`${c.name}__${trendMetric}`}
                 stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} activeDot={{ r: 4 }}
@@ -504,7 +504,7 @@ export default function CreativeDashboard() {
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                           <span className="text-xs font-bold text-gray-400">#{i + 1}</span>
                         </div>
-                        <p className="text-xs font-medium text-gray-800 break-all mb-1 leading-tight">{truncate(c.name, 40)}</p>
+                        <p className="text-xs font-medium text-gray-800 break-all mb-1 leading-tight">{c.name}</p>
                         <div className="flex gap-3 text-xs text-gray-500">
                           <span>Spend: <b className="text-gray-700">{fmtCurrency(c.spend)}</b></span>
                           <span>Install: <b className="text-gray-700">{fmtNum(c.installs)}</b></span>
