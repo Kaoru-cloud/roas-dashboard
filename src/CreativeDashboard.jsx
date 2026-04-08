@@ -32,8 +32,8 @@ const fmtNum = (v) => {
 const fmtWon = (v) => {
   if (v == null || !isFinite(v)) return '-';
   const man = v / 10000;
-  if (man >= 10000) return (man / 10000).toFixed(1) + '억';
-  if (man >= 1) return man.toFixed(0) + '만';
+  if (man >= 10000) return (man / 10000).toFixed(1) + '억원';
+  if (man >= 1) return man.toFixed(0) + '만원';
   return v.toFixed(0) + '원';
 };
 
