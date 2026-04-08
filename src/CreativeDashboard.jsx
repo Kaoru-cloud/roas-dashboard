@@ -564,7 +564,6 @@ export default function CreativeDashboard() {
         {topCreatives.length > 0 && (
           <>
             {renderBarChart()}
-            {renderScatterChart()}
             {renderTrendChart()}
           </>
         )}
