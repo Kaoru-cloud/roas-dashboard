@@ -103,18 +103,33 @@ export default function CreativeDashboard() {
     });
   };
 
-  // Rank channels & apps by total spend, take top 5
+  // Rank channels & apps by spend within date range, take top 5
+  const dateFiltered = useMemo(() => {
+    if (!startDate || !endDate) return rows;
+    return rows.filter(r => r.day >= startDate && r.day <= endDate);
+  }, [rows, startDate, endDate]);
+
   const channelsRanked = useMemo(() => {
     const map = {};
-    rows.forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-  }, [rows]);
+    dateFiltered.forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
+    const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+    setSelCh(prev => {
+      const valid = prev.filter(c => ranked.includes(c));
+      return valid.length ? valid : ranked.filter(c => c.toLowerCase() !== 'organic');
+    });
+    return ranked;
+  }, [dateFiltered]);
 
   const appsRanked = useMemo(() => {
     const map = {};
-    rows.forEach(r => { if (r.app) map[r.app] = (map[r.app] || 0) + r.cost; });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-  }, [rows]);
+    dateFiltered.forEach(r => { if (r.app) map[r.app] = (map[r.app] || 0) + r.cost; });
+    const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+    setSelApp(prev => {
+      const valid = prev.filter(a => ranked.includes(a));
+      return valid.length ? valid : ranked;
+    });
+    return ranked;
+  }, [dateFiltered]);
 
   const stores = useMemo(() => [...new Set(rows.map(r => r.store).filter(Boolean))].sort(), [rows]);
 
@@ -134,12 +149,11 @@ export default function CreativeDashboard() {
 
   const campaignsRanked = useMemo(() => {
     const map = {};
-    rows.filter(r => selCh.includes(r.ch)).forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
+    dateFiltered.filter(r => selCh.includes(r.ch)).forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
     const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-    // Auto-select all when channel changes
     setSelCn(ranked);
     return ranked;
-  }, [rows, selCh]);
+  }, [dateFiltered, selCh]);
 
   const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
   const toggleAll = (setter, all, sel) => () => setter(sel.length === all.length ? [] : [...all]);
