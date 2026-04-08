@@ -119,6 +119,20 @@ export default function CreativeDashboard() {
 
   const stores = useMemo(() => [...new Set(rows.map(r => r.store).filter(Boolean))].sort(), [rows]);
 
+  const maxDay = useMemo(() => {
+    const days = rows.map(r => r.day).filter(Boolean).sort();
+    return days.length ? days[days.length - 1] : '';
+  }, [rows]);
+
+  const setDateRange = (daysBack) => {
+    if (!maxDay) return;
+    const end = new Date(maxDay);
+    const start = new Date(end);
+    start.setDate(start.getDate() - daysBack + 1);
+    setStartDate(start.toISOString().slice(0, 10));
+    setEndDate(maxDay);
+  };
+
   const campaignsRanked = useMemo(() => {
     const map = {};
     rows.filter(r => selCh.includes(r.ch)).forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
@@ -433,6 +447,15 @@ export default function CreativeDashboard() {
 
           {rows.length > 0 && (
             <>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {[{ label: '최근 1주', days: 7 }, { label: '최근 2주', days: 14 }, { label: '최근 1달', days: 30 }, { label: '전체', days: 0 }].map(p => (
+                  <button key={p.label} onClick={() => p.days ? setDateRange(p.days) : (() => { const days = rows.map(r => r.day).filter(Boolean).sort(); if (days.length) { setStartDate(days[0]); setEndDate(days[days.length - 1]); } })()}
+                    className="px-3 py-1 rounded-md text-xs font-semibold border-2 transition-all bg-gray-100 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800">
+                    {p.label}
+                  </button>
+                ))}
+                <span className="text-xs text-gray-400 self-center ml-1">기준: 데이터 최신일 {maxDay || '-'}</span>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">시작일</label>
