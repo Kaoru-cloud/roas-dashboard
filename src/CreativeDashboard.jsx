@@ -483,15 +483,20 @@ export default function CreativeDashboard() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                {appsRanked.length > 1 && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">앱 (Spend Top 5)</label>
-                    <select multiple value={selApp} onChange={e => setSelApp([...e.target.selectedOptions].map(o => o.value))}
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
-                      {appsRanked.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">앱 (Spend Top 5)</label>
+                  <select multiple value={selApp} onChange={e => setSelApp([...e.target.selectedOptions].map(o => o.value))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                    {appsRanked.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">스토어</label>
+                  <select multiple value={selStore} onChange={e => setSelStore([...e.target.selectedOptions].map(o => o.value))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                    {stores.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">채널 (Spend Top 5)</label>
                   <select multiple value={selCh} onChange={e => setSelCh([...e.target.selectedOptions].map(o => o.value))}
@@ -506,15 +511,6 @@ export default function CreativeDashboard() {
                     {campaignsRanked.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                {stores.length > 1 && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">스토어</label>
-                    <select multiple value={selStore} onChange={e => setSelStore([...e.target.selectedOptions].map(o => o.value))}
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
-                      {stores.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                )}
               </div>
 
               {/* Sort metric selector */}
