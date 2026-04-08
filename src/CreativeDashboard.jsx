@@ -14,18 +14,10 @@ const COLORS = ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#f59e0b','#10
 const NOISE_LIST = ['unknown','expired attributions','anonymous ips','malformed advertising id','untrusted devices'];
 const isNoise = (n) => !n || NOISE_LIST.includes(n.toLowerCase().trim());
 
-const SORT_OPTIONS = [
-  { key: 'spend', label: 'Spend' },
-  { key: 'installs', label: 'Installs' },
-  { key: 'revenue', label: 'D+2 Revenue' },
-  { key: 'cpi', label: 'CPI' },
-  { key: 'roas', label: 'ROAS' },
-];
-
-const TREND_METRICS = [
-  { key: 'cost', label: 'Spend' },
-  { key: 'installs', label: 'Installs' },
-  { key: 'rev2', label: 'D+2 Revenue' },
+const METRIC_OPTIONS = [
+  { key: 'spend', trendKey: 'cost', label: 'Spend' },
+  { key: 'installs', trendKey: 'installs', label: 'Installs' },
+  { key: 'revenue', trendKey: 'rev2', label: 'D+2 Revenue' },
 ];
 
 const fmtNum = (v) => {
@@ -58,7 +50,7 @@ export default function CreativeDashboard() {
   const [showTable, setShowTable] = useState(true);
   const [fileName, setFileName] = useState('');
   const [sortMetric, setSortMetric] = useState('spend');
-  const [trendMetric, setTrendMetric] = useState('cost');
+  const trendMetric = METRIC_OPTIONS.find(m => m.key === sortMetric)?.trendKey || 'cost';
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -181,17 +173,8 @@ export default function CreativeDashboard() {
       roas: c.spend > 0 ? c.revenue / c.spend : 0,
     }));
 
-    // Sort
-    const sortFn = (a, b) => {
-      if (sortMetric === 'cpi') {
-        // CPI: lower is better
-        if (!isFinite(a.cpi) && !isFinite(b.cpi)) return 0;
-        if (!isFinite(a.cpi)) return 1;
-        if (!isFinite(b.cpi)) return -1;
-        return a.cpi - b.cpi;
-      }
-      return (b[sortMetric] || 0) - (a[sortMetric] || 0);
-    };
+    // Sort: descending by selected metric
+    const sortFn = (a, b) => (b[sortMetric] || 0) - (a[sortMetric] || 0);
 
     const top = allCreatives.sort(sortFn).slice(0, topN);
     const topNames = new Set(top.map(c => c.name));
@@ -252,7 +235,7 @@ export default function CreativeDashboard() {
 
   const renderBarChart = () => {
     if (!barData.length) return null;
-    const metricLabel = SORT_OPTIONS.find(s => s.key === sortMetric)?.label || sortMetric;
+    const metricLabel = METRIC_OPTIONS.find(s => s.key === sortMetric)?.label || sortMetric;
     const barH = Math.max(barData.length * 40 + 40, 200);
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
@@ -331,21 +314,11 @@ export default function CreativeDashboard() {
 
   const renderTrendChart = () => {
     if (!trendData.length || !topCreatives.length) return null;
-    const metricLabel = TREND_METRICS.find(m => m.key === trendMetric)?.label || trendMetric;
+    const metricLabel = METRIC_OPTIONS.find(m => m.key === sortMetric)?.label || sortMetric;
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <div className="flex items-center gap-3 mb-3">
-          <h3 className="text-sm font-bold text-gray-800">일별 소재 추이</h3>
-          <div className="flex gap-1.5">
-            {TREND_METRICS.map(m => (
-              <button key={m.key} onClick={() => setTrendMetric(m.key)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold border-2 transition-all ${
-                  trendMetric === m.key ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-200 text-gray-400'
-                }`}>
-                {m.label}
-              </button>
-            ))}
-          </div>
+          <h3 className="text-sm font-bold text-gray-800">일별 소재 추이 ({metricLabel})</h3>
         </div>
         <ResponsiveContainer width="100%" height={360}>
           <LineChart data={trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -393,7 +366,7 @@ export default function CreativeDashboard() {
             <tr className="border-b-2 border-gray-200">
               <th className="py-2 px-2 text-left font-semibold text-gray-600 w-8">#</th>
               <th className="py-2 px-3 text-left font-semibold text-gray-600 min-w-[200px]">소재</th>
-              {SORT_OPTIONS.map(s => (
+              {METRIC_OPTIONS.map(s => (
                 <th key={s.key} onClick={() => setSortMetric(s.key)}
                   className="py-2 px-3 text-right font-semibold text-gray-600 cursor-pointer hover:text-blue-600 whitespace-nowrap">
                   {s.label} {sortMetric === s.key ? (s.key === 'cpi' ? '▲' : '▼') : ''}
@@ -530,7 +503,7 @@ export default function CreativeDashboard() {
               <div className="mb-4">
                 <span className="text-xs font-semibold text-gray-600 mb-1.5 block">정렬 기준</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {SORT_OPTIONS.map(s => (
+                  {METRIC_OPTIONS.map(s => (
                     <button key={s.key} onClick={() => setSortMetric(s.key)}
                       className={`px-3 py-1 rounded-md text-xs font-semibold border-2 transition-all ${
                         sortMetric === s.key ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-200 text-gray-400'
@@ -545,7 +518,7 @@ export default function CreativeDashboard() {
               {topCreatives.length > 0 && (
                 <div>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
-                    Top {topN} ({SORT_OPTIONS.find(s => s.key === sortMetric)?.label} 순)
+                    Top {topN} ({METRIC_OPTIONS.find(s => s.key === sortMetric)?.label} 순)
                   </span>
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2">
                     {topCreatives.slice(0, 5).map((c, i) => (
