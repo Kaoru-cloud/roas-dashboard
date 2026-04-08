@@ -121,9 +121,12 @@ export default function CreativeDashboard() {
 
   const campaignsRanked = useMemo(() => {
     const map = {};
-    rows.forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-  }, [rows]);
+    rows.filter(r => selCh.includes(r.ch)).forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
+    const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+    // Auto-select all when channel changes
+    setSelCn(ranked);
+    return ranked;
+  }, [rows, selCh]);
 
   const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
   const toggleAll = (setter, all, sel) => () => setter(sel.length === all.length ? [] : [...all]);
