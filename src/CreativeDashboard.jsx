@@ -85,16 +85,33 @@ export default function CreativeDashboard() {
           setStartDate(days[0]);
           setEndDate(days[days.length - 1]);
         }
-        // Auto-select all except Organic channel
-        setSelCh([...new Set(cleaned.map(r => r.ch).filter(Boolean))].filter(c => c.toLowerCase() !== 'organic').sort());
-        setSelApp([...new Set(cleaned.map(r => r.app).filter(Boolean))].sort());
+        // Auto-select top spend channel (excluding Organic) and top spend app
+        const chSpend = {};
+        cleaned.forEach(r => { if (r.ch) chSpend[r.ch] = (chSpend[r.ch] || 0) + r.cost; });
+        const topChs = Object.entries(chSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n).filter(c => c.toLowerCase() !== 'organic');
+        setSelCh(topChs);
+        const appSpend = {};
+        cleaned.forEach(r => { if (r.app) appSpend[r.app] = (appSpend[r.app] || 0) + r.cost; });
+        const topApps = Object.entries(appSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n);
+        setSelApp(topApps);
         setSelStore([...new Set(cleaned.map(r => r.store).filter(Boolean))].sort());
       }
     });
   };
 
-  const channels = useMemo(() => [...new Set(rows.map(r => r.ch).filter(Boolean))].sort(), [rows]);
-  const apps = useMemo(() => [...new Set(rows.map(r => r.app).filter(Boolean))].sort(), [rows]);
+  // Rank channels & apps by total spend, take top 5
+  const channelsRanked = useMemo(() => {
+    const map = {};
+    rows.forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [rows]);
+
+  const appsRanked = useMemo(() => {
+    const map = {};
+    rows.forEach(r => { if (r.app) map[r.app] = (map[r.app] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [rows]);
+
   const stores = useMemo(() => [...new Set(rows.map(r => r.store).filter(Boolean))].sort(), [rows]);
 
   const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
@@ -431,9 +448,33 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              {apps.length > 1 && <Chips label="앱" items={apps} sel={selApp} onToggle={toggle(setSelApp)} onAll={toggleAll(setSelApp, apps, selApp)} />}
-              {stores.length > 1 && <Chips label="스토어" items={stores} sel={selStore} onToggle={toggle(setSelStore)} onAll={toggleAll(setSelStore, stores, selStore)} />}
-              <Chips label="채널" items={channels} sel={selCh} onToggle={toggle(setSelCh)} onAll={toggleAll(setSelCh, channels, selCh)} />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {appsRanked.length > 1 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">앱 (Spend Top 5)</label>
+                    <select multiple value={selApp} onChange={e => setSelApp([...e.target.selectedOptions].map(o => o.value))}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                      {appsRanked.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">채널 (Spend Top 5)</label>
+                  <select multiple value={selCh} onChange={e => setSelCh([...e.target.selectedOptions].map(o => o.value))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                    {channelsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                {stores.length > 1 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">스토어</label>
+                    <select multiple value={selStore} onChange={e => setSelStore([...e.target.selectedOptions].map(o => o.value))}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                      {stores.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
 
               {/* Sort metric selector */}
               <div className="mb-4">
