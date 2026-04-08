@@ -49,7 +49,7 @@ export default function CreativeDashboard() {
   const [rows, setRows] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [topN, setTopN] = useState(10);
+  const [topN, setTopN] = useState(5);
   const [selCh, setSelCh] = useState([]);
   const [selApp, setSelApp] = useState([]);
   const [selStore, setSelStore] = useState([]);
