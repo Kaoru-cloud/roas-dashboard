@@ -53,6 +53,7 @@ export default function CreativeDashboard() {
   const [selCh, setSelCh] = useState([]);
   const [selApp, setSelApp] = useState([]);
   const [selStore, setSelStore] = useState([]);
+  const [selCn, setSelCn] = useState([]);
   const [showNoise, setShowNoise] = useState(false);
   const [showTable, setShowTable] = useState(true);
   const [fileName, setFileName] = useState('');
@@ -95,6 +96,10 @@ export default function CreativeDashboard() {
         const topApps = Object.entries(appSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n);
         setSelApp(topApps);
         setSelStore([...new Set(cleaned.map(r => r.store).filter(Boolean))].sort());
+        const cnSpend = {};
+        cleaned.forEach(r => { if (r.cn && !isNoise(r.cn)) cnSpend[r.cn] = (cnSpend[r.cn] || 0) + r.cost; });
+        const topCns = Object.entries(cnSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n);
+        setSelCn(topCns);
       }
     });
   };
@@ -114,6 +119,12 @@ export default function CreativeDashboard() {
 
   const stores = useMemo(() => [...new Set(rows.map(r => r.store).filter(Boolean))].sort(), [rows]);
 
+  const campaignsRanked = useMemo(() => {
+    const map = {};
+    rows.forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [rows]);
+
   const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
   const toggleAll = (setter, all, sel) => () => setter(sel.length === all.length ? [] : [...all]);
 
@@ -125,6 +136,7 @@ export default function CreativeDashboard() {
       if (!selCh.includes(r.ch)) return false;
       if (!selApp.includes(r.app)) return false;
       if (!selStore.includes(r.store)) return false;
+      if (selCn.length && !selCn.includes(r.cn)) return false;
       if (!showNoise && isNoise(r.creative)) return false;
       return true;
     });
@@ -185,7 +197,7 @@ export default function CreativeDashboard() {
     const trend = Object.values(dailyMap).sort((a, b) => a.day.localeCompare(b.day));
 
     return { topCreatives: top, scatterData: scatter, trendData: trend };
-  }, [rows, startDate, endDate, topN, selCh, selApp, selStore, showNoise, sortMetric]);
+  }, [rows, startDate, endDate, topN, selCh, selApp, selStore, selCn, showNoise, sortMetric]);
 
   // Bar chart data (reversed for vertical layout - top item at top)
   const barData = useMemo(() => {
@@ -448,7 +460,7 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 {appsRanked.length > 1 && (
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">앱 (Spend Top 5)</label>
@@ -463,6 +475,13 @@ export default function CreativeDashboard() {
                   <select multiple value={selCh} onChange={e => setSelCh([...e.target.selectedOptions].map(o => o.value))}
                     className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
                     {channelsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">캠페인 (Spend Top 5)</label>
+                  <select multiple value={selCn} onChange={e => setSelCn([...e.target.selectedOptions].map(o => o.value))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                    {campaignsRanked.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 {stores.length > 1 && (
