@@ -221,11 +221,11 @@ export default function CreativeDashboard() {
 
   // Bar chart data (reversed for vertical layout - top item at top)
   const barData = useMemo(() => {
-    return [...topCreatives].reverse().map((c, i) => ({
+    return [...topCreatives].map((c, i) => ({
       name: c.name,
       displayName: c.name,
       value: sortMetric === 'roas' ? c.roas * 100 : c[sortMetric],
-      fill: COLORS[(topCreatives.length - 1 - i) % COLORS.length],
+      fill: COLORS[i % COLORS.length],
     }));
   }, [topCreatives, sortMetric]);
 
