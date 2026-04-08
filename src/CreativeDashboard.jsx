@@ -84,10 +84,12 @@ export default function CreativeDashboard() {
         const days = cleaned.map(r => r.day).filter(Boolean).sort();
         if (days.length) {
           const maxD = days[days.length - 1];
-          const start = new Date(maxD);
-          start.setDate(start.getDate() - 6);
-          setStartDate(start.toISOString().slice(0, 10));
-          setEndDate(maxD);
+          const [y, m, d] = maxD.split('-').map(Number);
+          const end = new Date(y, m - 1, d);
+          const start = new Date(y, m - 1, d - 6);
+          const fmt = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+          setStartDate(fmt(start));
+          setEndDate(fmt(end));
         }
         // Auto-select top spend channel (excluding Organic) and top spend app
         const chSpend = {};
@@ -129,10 +131,10 @@ export default function CreativeDashboard() {
 
   const setDateRange = (daysBack) => {
     if (!maxDay) return;
-    const end = new Date(maxDay);
-    const start = new Date(end);
-    start.setDate(start.getDate() - daysBack + 1);
-    setStartDate(start.toISOString().slice(0, 10));
+    const [y, m, d] = maxDay.split('-').map(Number);
+    const start = new Date(y, m - 1, d - daysBack + 1);
+    const fmt = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+    setStartDate(fmt(start));
     setEndDate(maxDay);
   };
 
