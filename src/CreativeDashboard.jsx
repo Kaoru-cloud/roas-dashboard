@@ -433,7 +433,7 @@ export default function CreativeDashboard() {
                   <label className="block text-xs font-medium text-gray-500 mb-1">Top N</label>
                   <select value={topN} onChange={e => setTopN(Number(e.target.value))}
                     className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-                    {[5, 10, 15, 20, 30].map(n => <option key={n} value={n}>Top {n}</option>)}
+                    {[3, 5, 7, 10].map(n => <option key={n} value={n}>Top {n}</option>)}
                   </select>
                 </div>
                 <div className="flex items-end gap-2">
