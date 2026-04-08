@@ -47,8 +47,8 @@ const truncate = (s, len = 30) => s && s.length > len ? s.slice(0, len) + '...' 
 
 export default function CreativeDashboard() {
   const [rows, setRows] = useState([]);
-  const [startDate, setStartDate] = useState('2025-01-01');
-  const [endDate, setEndDate] = useState('2026-12-31');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [topN, setTopN] = useState(10);
   const [selCh, setSelCh] = useState([]);
   const [selApp, setSelApp] = useState([]);
@@ -79,6 +79,12 @@ export default function CreativeDashboard() {
           rev2: parseFloat(r.all_revenue_total_d2) || 0,
         }));
         setRows(cleaned);
+        // Auto-detect date range from data
+        const days = cleaned.map(r => r.day).filter(Boolean).sort();
+        if (days.length) {
+          setStartDate(days[0]);
+          setEndDate(days[days.length - 1]);
+        }
         // Auto-select all except Organic channel
         setSelCh([...new Set(cleaned.map(r => r.ch).filter(Boolean))].filter(c => c.toLowerCase() !== 'organic').sort());
         setSelApp([...new Set(cleaned.map(r => r.app).filter(Boolean))].sort());
