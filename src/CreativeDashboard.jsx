@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from "react";
 import {
   BarChart, Bar, Cell,
-  ScatterChart, Scatter, ZAxis,
   LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer,
 } from "recharts";
 import * as Papa from "papaparse";
 
@@ -14,50 +13,45 @@ const COLORS = ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#f59e0b','#10
 const NOISE_LIST = ['unknown','expired attributions','anonymous ips','malformed advertising id','untrusted devices'];
 const isNoise = (n) => !n || NOISE_LIST.includes(n.toLowerCase().trim());
 
-const SORT_OPTIONS = [
-  { key: 'spend', label: 'Spend' },
-  { key: 'installs', label: 'Installs' },
-  { key: 'revenue', label: 'D+2 Revenue' },
-  { key: 'cpi', label: 'CPI' },
-  { key: 'roas', label: 'ROAS' },
+const METRIC_OPTIONS = [
+  { key: 'spend', trendKey: 'cost', label: 'Spend' },
+  { key: 'installs', trendKey: 'installs', label: 'Installs' },
+  { key: 'revenue', trendKey: 'rev2', label: 'D+2 Revenue' },
 ];
 
-const TREND_METRICS = [
-  { key: 'cost', label: 'Spend' },
-  { key: 'installs', label: 'Installs' },
-  { key: 'rev2', label: 'D+2 Revenue' },
-];
-
-const fmtNum = (v) => {
+const fmtCount = (v) => {
   if (v == null || !isFinite(v)) return '-';
-  if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return v.toFixed(0);
+  const man = v / 10000;
+  if (man >= 10000) return (man / 10000).toFixed(1) + '억건';
+  if (man >= 1) return man.toFixed(0) + '만건';
+  return v.toFixed(0) + '건';
 };
 
-const fmtCurrency = (v) => {
+const fmtWon = (v) => {
   if (v == null || !isFinite(v)) return '-';
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return v.toFixed(0);
+  const man = v / 10000;
+  if (man >= 10000) return (man / 10000).toFixed(1) + '억원';
+  if (man >= 1) return man.toFixed(0) + '만원';
+  return v.toFixed(0) + '원';
 };
 
-const truncate = (s, len = 30) => s && s.length > len ? s.slice(0, len) + '...' : s;
+const fmtMetric = (v, metric) => metric === 'installs' ? fmtCount(v) : fmtWon(v);
 
 export default function CreativeDashboard() {
   const [rows, setRows] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [topN, setTopN] = useState(10);
-  const [selCh, setSelCh] = useState([]);
-  const [selApp, setSelApp] = useState([]);
-  const [selStore, setSelStore] = useState([]);
+  const [topN, setTopN] = useState(5);
+  const [selApp, setSelApp] = useState('');
+  const [selStore, setSelStore] = useState('');
+  const [selCh, setSelCh] = useState('');
+  const [selCn, setSelCn] = useState('');
+  const [selAg, setSelAg] = useState('');
   const [showNoise, setShowNoise] = useState(false);
   const [showTable, setShowTable] = useState(true);
   const [fileName, setFileName] = useState('');
   const [sortMetric, setSortMetric] = useState('spend');
-  const [trendMetric, setTrendMetric] = useState('cost');
+  const trendMetric = METRIC_OPTIONS.find(m => m.key === sortMetric)?.trendKey || 'cost';
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -79,40 +73,88 @@ export default function CreativeDashboard() {
           rev2: parseFloat(r.all_revenue_total_d2) || 0,
         }));
         setRows(cleaned);
-        // Auto-detect date range from data
         const days = cleaned.map(r => r.day).filter(Boolean).sort();
         if (days.length) {
-          setStartDate(days[0]);
-          setEndDate(days[days.length - 1]);
+          const maxD = days[days.length - 1];
+          const [y, m, d] = maxD.split('-').map(Number);
+          const start = new Date(y, m - 1, d - 6);
+          const fmt = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+          setStartDate(fmt(start));
+          setEndDate(maxD);
         }
-        // Auto-select all except Organic channel
-        setSelCh([...new Set(cleaned.map(r => r.ch).filter(Boolean))].filter(c => c.toLowerCase() !== 'organic').sort());
-        setSelApp([...new Set(cleaned.map(r => r.app).filter(Boolean))].sort());
-        setSelStore([...new Set(cleaned.map(r => r.store).filter(Boolean))].sort());
+        // Reset all filters to (전체)
+        setSelApp('');
+        setSelStore('');
+        setSelCh('');
+        setSelCn('');
+        setSelAg('');
       }
     });
   };
 
-  const channels = useMemo(() => [...new Set(rows.map(r => r.ch).filter(Boolean))].sort(), [rows]);
-  const apps = useMemo(() => [...new Set(rows.map(r => r.app).filter(Boolean))].sort(), [rows]);
+  const dateFiltered = useMemo(() => {
+    if (!startDate || !endDate) return rows;
+    return rows.filter(r => r.day >= startDate && r.day <= endDate);
+  }, [rows, startDate, endDate]);
+
+  const appsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered.forEach(r => { if (r.app) map[r.app] = (map[r.app] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered]);
+
   const stores = useMemo(() => [...new Set(rows.map(r => r.store).filter(Boolean))].sort(), [rows]);
 
-  const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
-  const toggleAll = (setter, all, sel) => () => setter(sel.length === all.length ? [] : [...all]);
+  const channelsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered.filter(r => !selApp || r.app === selApp).forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selApp]);
 
-  const { topCreatives, scatterData, trendData } = useMemo(() => {
-    if (!rows.length || !selCh.length) return { topCreatives: [], scatterData: [], trendData: [] };
+  const campaignsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => (!selCh || r.ch === selCh) && (!selApp || r.app === selApp))
+      .forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selCh, selApp]);
+
+  const adgroupsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => (!selCh || r.ch === selCh) && (!selCn || r.cn === selCn) && (!selApp || r.app === selApp))
+      .forEach(r => { if (r.ag && !isNoise(r.ag)) map[r.ag] = (map[r.ag] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selCh, selCn, selApp]);
+
+  const maxDay = useMemo(() => {
+    const days = rows.map(r => r.day).filter(Boolean).sort();
+    return days.length ? days[days.length - 1] : '';
+  }, [rows]);
+
+  const setDateRange = (daysBack) => {
+    if (!maxDay) return;
+    const [y, m, d] = maxDay.split('-').map(Number);
+    const start = new Date(y, m - 1, d - daysBack + 1);
+    const fmt = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+    setStartDate(fmt(start));
+    setEndDate(maxDay);
+  };
+
+  const { topCreatives, trendData } = useMemo(() => {
+    if (!rows.length) return { topCreatives: [], trendData: [] };
 
     const filtered = rows.filter(r => {
       if (r.day < startDate || r.day > endDate) return false;
-      if (!selCh.includes(r.ch)) return false;
-      if (!selApp.includes(r.app)) return false;
-      if (!selStore.includes(r.store)) return false;
+      if (selApp && r.app !== selApp) return false;
+      if (selStore && r.store !== selStore) return false;
+      if (selCh && r.ch !== selCh) return false;
+      if (selCn && r.cn !== selCn) return false;
+      if (selAg && r.ag !== selAg) return false;
       if (!showNoise && isNoise(r.creative)) return false;
       return true;
     });
 
-    // Aggregate by creative
     const creativeMap = {};
     filtered.forEach(r => {
       const key = r.creative || 'Unknown';
@@ -123,38 +165,16 @@ export default function CreativeDashboard() {
       d.revenue += r.rev2;
     });
 
-    // Derived metrics
     const allCreatives = Object.values(creativeMap).map(c => ({
       ...c,
       cpi: c.installs > 0 ? c.spend / c.installs : Infinity,
       roas: c.spend > 0 ? c.revenue / c.spend : 0,
     }));
 
-    // Sort
-    const sortFn = (a, b) => {
-      if (sortMetric === 'cpi') {
-        // CPI: lower is better
-        if (!isFinite(a.cpi) && !isFinite(b.cpi)) return 0;
-        if (!isFinite(a.cpi)) return 1;
-        if (!isFinite(b.cpi)) return -1;
-        return a.cpi - b.cpi;
-      }
-      return (b[sortMetric] || 0) - (a[sortMetric] || 0);
-    };
-
+    const sortFn = (a, b) => (b[sortMetric] || 0) - (a[sortMetric] || 0);
     const top = allCreatives.sort(sortFn).slice(0, topN);
     const topNames = new Set(top.map(c => c.name));
 
-    // Scatter data (all creatives with spend > 0)
-    const scatter = allCreatives.filter(c => c.spend > 0).map((c, i) => ({
-      name: c.name,
-      spend: c.spend,
-      revenue: c.revenue,
-      installs: c.installs,
-      isTop: topNames.has(c.name),
-    }));
-
-    // Daily trend for top creatives
     const dailyMap = {};
     filtered.filter(r => topNames.has(r.creative)).forEach(r => {
       const day = r.day;
@@ -166,42 +186,21 @@ export default function CreativeDashboard() {
     });
 
     const trend = Object.values(dailyMap).sort((a, b) => a.day.localeCompare(b.day));
+    return { topCreatives: top, trendData: trend };
+  }, [rows, startDate, endDate, topN, selApp, selStore, selCh, selCn, selAg, showNoise, sortMetric]);
 
-    return { topCreatives: top, scatterData: scatter, trendData: trend };
-  }, [rows, startDate, endDate, topN, selCh, selApp, selStore, showNoise, sortMetric]);
-
-  // Bar chart data (reversed for vertical layout - top item at top)
   const barData = useMemo(() => {
-    return [...topCreatives].reverse().map((c, i) => ({
+    return [...topCreatives].map((c, i) => ({
       name: c.name,
-      displayName: truncate(c.name),
-      value: sortMetric === 'roas' ? c.roas * 100 : c[sortMetric],
-      fill: COLORS[(topCreatives.length - 1 - i) % COLORS.length],
+      displayName: c.name,
+      value: c[sortMetric],
+      fill: COLORS[i % COLORS.length],
     }));
   }, [topCreatives, sortMetric]);
 
-  const Chips = ({ label, items, sel, onToggle, onAll }) => (
-    <div className="mb-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold text-gray-600">{label} ({sel.length}/{items.length})</span>
-        <button onClick={onAll} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-          {sel.length === items.length ? '해제' : '전체'}
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map(v => (
-          <button key={v} onClick={() => onToggle(v)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${sel.includes(v) ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-            {v}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
   const renderBarChart = () => {
     if (!barData.length) return null;
-    const metricLabel = SORT_OPTIONS.find(s => s.key === sortMetric)?.label || sortMetric;
+    const metricLabel = METRIC_OPTIONS.find(s => s.key === sortMetric)?.label || sortMetric;
     const barH = Math.max(barData.length * 40 + 40, 200);
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
@@ -211,14 +210,11 @@ export default function CreativeDashboard() {
           <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={v => sortMetric === 'roas' ? v.toFixed(0) + '%' : fmtNum(v)} />
+              tickFormatter={v => fmtMetric(v, sortMetric)} />
             <YAxis type="category" dataKey="displayName" width={200} stroke="#9ca3af" style={{ fontSize: '10px' }} />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
-              formatter={(v, name, props) => {
-                const label = sortMetric === 'roas' ? v.toFixed(1) + '%' : fmtCurrency(v);
-                return [label, metricLabel];
-              }}
+              formatter={(v) => [fmtMetric(v, sortMetric), metricLabel]}
               labelFormatter={(label) => {
                 const item = barData.find(d => d.displayName === label);
                 return item ? item.name : label;
@@ -235,72 +231,19 @@ export default function CreativeDashboard() {
     );
   };
 
-  const renderScatterChart = () => {
-    if (!scatterData.length) return null;
-    const maxSpend = Math.max(...scatterData.map(d => d.spend));
-    const maxRev = Math.max(...scatterData.map(d => d.revenue));
-    const maxAxis = Math.max(maxSpend, maxRev) * 1.1;
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-        <h3 className="text-sm font-bold text-gray-800 mb-1">Spend vs D+2 Revenue</h3>
-        <p className="text-xs text-gray-400 mb-3">버블 크기 = Installs / 대각선 위 = ROAS {'>'} 100%</p>
-        <ResponsiveContainer width="100%" height={400}>
-          <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis type="number" dataKey="spend" name="Spend" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={fmtNum} label={{ value: 'Spend', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#9ca3af' }} />
-            <YAxis type="number" dataKey="revenue" name="D+2 Revenue" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={fmtNum} label={{ value: 'D+2 Revenue', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11, fill: '#9ca3af' }} />
-            <ZAxis type="number" dataKey="installs" range={[40, 400]} name="Installs" />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const d = payload[0].payload;
-                return (
-                  <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11, padding: '8px 12px', maxWidth: 300 }}>
-                    <p style={{ fontWeight: 600, marginBottom: 4, wordBreak: 'break-all' }}>{d.name}</p>
-                    <p>Spend: {fmtCurrency(d.spend)}</p>
-                    <p>D+2 Revenue: {fmtCurrency(d.revenue)}</p>
-                    <p>Installs: {fmtNum(d.installs)}</p>
-                    <p>ROAS: {d.spend > 0 ? ((d.revenue / d.spend) * 100).toFixed(1) + '%' : '-'}</p>
-                  </div>
-                );
-              }}
-            />
-            <ReferenceLine segment={[{ x: 0, y: 0 }, { x: maxAxis, y: maxAxis }]}
-              stroke="#ef4444" strokeDasharray="8 4" strokeWidth={1.5} />
-            <Scatter data={scatterData.filter(d => d.isTop)} fill="#2563eb" fillOpacity={0.7} />
-            <Scatter data={scatterData.filter(d => !d.isTop)} fill="#9ca3af" fillOpacity={0.3} />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  };
-
   const renderTrendChart = () => {
     if (!trendData.length || !topCreatives.length) return null;
-    const metricLabel = TREND_METRICS.find(m => m.key === trendMetric)?.label || trendMetric;
+    const metricLabel = METRIC_OPTIONS.find(m => m.key === sortMetric)?.label || sortMetric;
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <div className="flex items-center gap-3 mb-3">
-          <h3 className="text-sm font-bold text-gray-800">일별 소재 추이</h3>
-          <div className="flex gap-1.5">
-            {TREND_METRICS.map(m => (
-              <button key={m.key} onClick={() => setTrendMetric(m.key)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold border-2 transition-all ${
-                  trendMetric === m.key ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-200 text-gray-400'
-                }`}>
-                {m.label}
-              </button>
-            ))}
-          </div>
+          <h3 className="text-sm font-bold text-gray-800">일별 소재 추이 ({metricLabel})</h3>
         </div>
         <ResponsiveContainer width="100%" height={360}>
           <LineChart data={trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="day" stroke="#9ca3af" style={{ fontSize: '11px' }} />
-            <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={fmtNum} />
+            <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={v => fmtMetric(v, sortMetric)} />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
               content={({ active, payload, label }) => {
@@ -312,7 +255,7 @@ export default function CreativeDashboard() {
                     <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#374151' }}>{label}</p>
                     {items.map(p => (
                       <p key={p.dataKey} style={{ margin: '2px 0', color: p.stroke }}>
-                        {truncate(p.dataKey?.split('__')[0], 25)}: {fmtCurrency(p.value)}
+                        {p.dataKey?.split('__')[0]}: {fmtMetric(p.value, sortMetric)}
                       </p>
                     ))}
                   </div>
@@ -320,7 +263,7 @@ export default function CreativeDashboard() {
               }}
             />
             <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }} iconType="line"
-              payload={topCreatives.map((c, i) => ({ value: truncate(c.name, 25), type: 'line', color: COLORS[i % COLORS.length] }))} />
+              payload={topCreatives.map((c, i) => ({ value: c.name, type: 'line', color: COLORS[i % COLORS.length] }))} />
             {topCreatives.map((c, i) => (
               <Line key={c.name} type="monotone" dataKey={`${c.name}__${trendMetric}`}
                 stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} activeDot={{ r: 4 }}
@@ -342,12 +285,14 @@ export default function CreativeDashboard() {
             <tr className="border-b-2 border-gray-200">
               <th className="py-2 px-2 text-left font-semibold text-gray-600 w-8">#</th>
               <th className="py-2 px-3 text-left font-semibold text-gray-600 min-w-[200px]">소재</th>
-              {SORT_OPTIONS.map(s => (
+              {METRIC_OPTIONS.map(s => (
                 <th key={s.key} onClick={() => setSortMetric(s.key)}
                   className="py-2 px-3 text-right font-semibold text-gray-600 cursor-pointer hover:text-blue-600 whitespace-nowrap">
-                  {s.label} {sortMetric === s.key ? (s.key === 'cpi' ? '▲' : '▼') : ''}
+                  {s.label} {sortMetric === s.key ? '▼' : ''}
                 </th>
               ))}
+              <th className="py-2 px-3 text-right font-semibold text-gray-600 whitespace-nowrap">CPI</th>
+              <th className="py-2 px-3 text-right font-semibold text-gray-600 whitespace-nowrap">ROAS</th>
             </tr>
           </thead>
           <tbody>
@@ -364,11 +309,11 @@ export default function CreativeDashboard() {
                   <td className="py-2 px-3 font-medium text-gray-800 break-all text-xs leading-tight max-w-[300px]">
                     {c.name}
                   </td>
-                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtCurrency(c.spend)}</td>
-                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtNum(c.installs)}</td>
-                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtCurrency(c.revenue)}</td>
+                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtWon(c.spend)}</td>
+                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtCount(c.installs)}</td>
+                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtWon(c.revenue)}</td>
                   <td className="py-2 px-3 text-right text-gray-700 font-medium">
-                    {isFinite(c.cpi) && c.cpi > 0 ? fmtCurrency(c.cpi) : '-'}
+                    {isFinite(c.cpi) && c.cpi > 0 ? Math.round(c.cpi).toLocaleString() + '원' : '-'}
                   </td>
                   <td className="py-2 px-3 text-right font-bold" style={{ backgroundColor: roasBg }}>
                     {c.spend > 0 ? (c.roas * 100).toFixed(1) + '%' : '-'}
@@ -382,11 +327,12 @@ export default function CreativeDashboard() {
     );
   };
 
+  const selectClass = "w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm";
+
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4" style={{ fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
       <div className="max-w-7xl mx-auto space-y-4">
 
-        {/* Header + Filters */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -401,22 +347,30 @@ export default function CreativeDashboard() {
 
           {rows.length > 0 && (
             <>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {[{ label: '최근 1주', days: 7 }, { label: '최근 2주', days: 14 }, { label: '최근 1달', days: 30 }, { label: '전체', days: 0 }].map(p => (
+                  <button key={p.label} onClick={() => p.days ? setDateRange(p.days) : (() => { const days = rows.map(r => r.day).filter(Boolean).sort(); if (days.length) { setStartDate(days[0]); setEndDate(days[days.length - 1]); } })()}
+                    className="px-3 py-1 rounded-md text-xs font-semibold border-2 transition-all bg-gray-100 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800">
+                    {p.label}
+                  </button>
+                ))}
+                <span className="text-xs text-gray-400 self-center ml-1">기준: 데이터 최신일 {maxDay || '-'}</span>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">시작일</label>
                   <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                    className={selectClass} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">종료일</label>
                   <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                    className={selectClass} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Top N</label>
-                  <select value={topN} onChange={e => setTopN(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-                    {[5, 10, 15, 20, 30].map(n => <option key={n} value={n}>Top {n}</option>)}
+                  <select value={topN} onChange={e => setTopN(Number(e.target.value))} className={selectClass}>
+                    {[3, 5, 7, 10].map(n => <option key={n} value={n}>Top {n}</option>)}
                   </select>
                 </div>
                 <div className="flex items-end gap-2">
@@ -431,15 +385,48 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              {apps.length > 1 && <Chips label="앱" items={apps} sel={selApp} onToggle={toggle(setSelApp)} onAll={toggleAll(setSelApp, apps, selApp)} />}
-              {stores.length > 1 && <Chips label="스토어" items={stores} sel={selStore} onToggle={toggle(setSelStore)} onAll={toggleAll(setSelStore, stores, selStore)} />}
-              <Chips label="채널" items={channels} sel={selCh} onToggle={toggle(setSelCh)} onAll={toggleAll(setSelCh, channels, selCh)} />
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">앱</label>
+                  <select value={selApp} onChange={e => { setSelApp(e.target.value); setSelCh(''); setSelCn(''); setSelAg(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {appsRanked.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">스토어</label>
+                  <select value={selStore} onChange={e => setSelStore(e.target.value)} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {stores.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">채널</label>
+                  <select value={selCh} onChange={e => { setSelCh(e.target.value); setSelCn(''); setSelAg(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {channelsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">캠페인</label>
+                  <select value={selCn} onChange={e => { setSelCn(e.target.value); setSelAg(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {campaignsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">광고 세트</label>
+                  <select value={selAg} onChange={e => setSelAg(e.target.value)} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {adgroupsRanked.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+              </div>
 
-              {/* Sort metric selector */}
               <div className="mb-4">
                 <span className="text-xs font-semibold text-gray-600 mb-1.5 block">정렬 기준</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {SORT_OPTIONS.map(s => (
+                  {METRIC_OPTIONS.map(s => (
                     <button key={s.key} onClick={() => setSortMetric(s.key)}
                       className={`px-3 py-1 rounded-md text-xs font-semibold border-2 transition-all ${
                         sortMetric === s.key ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-200 text-gray-400'
@@ -450,11 +437,10 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              {/* Summary cards */}
               {topCreatives.length > 0 && (
                 <div>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
-                    Top {topN} ({SORT_OPTIONS.find(s => s.key === sortMetric)?.label} 순)
+                    Top {topN} ({METRIC_OPTIONS.find(s => s.key === sortMetric)?.label} 순)
                   </span>
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2">
                     {topCreatives.slice(0, 5).map((c, i) => (
@@ -463,13 +449,13 @@ export default function CreativeDashboard() {
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                           <span className="text-xs font-bold text-gray-400">#{i + 1}</span>
                         </div>
-                        <p className="text-xs font-medium text-gray-800 break-all mb-1 leading-tight">{truncate(c.name, 40)}</p>
+                        <p className="text-xs font-medium text-gray-800 break-all mb-1 leading-tight">{c.name}</p>
                         <div className="flex gap-3 text-xs text-gray-500">
-                          <span>Spend: <b className="text-gray-700">{fmtCurrency(c.spend)}</b></span>
-                          <span>Install: <b className="text-gray-700">{fmtNum(c.installs)}</b></span>
+                          <span>Spend: <b className="text-gray-700">{fmtWon(c.spend)}</b></span>
+                          <span>Install: <b className="text-gray-700">{fmtCount(c.installs)}</b></span>
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">
-                          D+2 Rev: <b className="text-gray-700">{fmtCurrency(c.revenue)}</b>
+                          D+2 Rev: <b className="text-gray-700">{fmtWon(c.revenue)}</b>
                         </div>
                       </div>
                     ))}
@@ -480,19 +466,15 @@ export default function CreativeDashboard() {
           )}
         </div>
 
-        {/* Charts */}
         {topCreatives.length > 0 && (
           <>
             {renderBarChart()}
-            {renderScatterChart()}
             {renderTrendChart()}
           </>
         )}
 
-        {/* Table */}
         {renderTable()}
 
-        {/* Empty state */}
         {!rows.length && (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <div className="text-5xl mb-3">&#x1F3AF;</div>
