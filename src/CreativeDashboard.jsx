@@ -385,7 +385,7 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_1.5fr_1.25fr] gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">앱</label>
                   <select value={selApp} onChange={e => { setSelApp(e.target.value); setSelCh(''); setSelCn(''); setSelAg(''); }} className={selectClass}>
