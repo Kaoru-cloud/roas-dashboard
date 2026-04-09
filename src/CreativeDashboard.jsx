@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from "react";
 import {
   BarChart, Bar, Cell,
-  ScatterChart, Scatter, ZAxis,
   LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer,
 } from "recharts";
 import * as Papa from "papaparse";
 
@@ -20,15 +19,14 @@ const METRIC_OPTIONS = [
   { key: 'revenue', trendKey: 'rev2', label: 'D+2 Revenue' },
 ];
 
-const fmtNum = (v) => {
+const fmtCount = (v) => {
   if (v == null || !isFinite(v)) return '-';
-  if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
-  return v.toFixed(0);
+  const man = v / 10000;
+  if (man >= 10000) return (man / 10000).toFixed(1) + '억건';
+  if (man >= 1) return man.toFixed(0) + '만건';
+  return v.toFixed(0) + '건';
 };
 
-// 만원 단위 표시 (원 → 만원 변환)
 const fmtWon = (v) => {
   if (v == null || !isFinite(v)) return '-';
   const man = v / 10000;
@@ -37,17 +35,18 @@ const fmtWon = (v) => {
   return v.toFixed(0) + '원';
 };
 
-const truncate = (s, len = 30) => s && s.length > len ? s.slice(0, len) + '...' : s;
+const fmtMetric = (v, metric) => metric === 'installs' ? fmtCount(v) : fmtWon(v);
 
 export default function CreativeDashboard() {
   const [rows, setRows] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [topN, setTopN] = useState(5);
-  const [selCh, setSelCh] = useState([]);
-  const [selApp, setSelApp] = useState([]);
-  const [selStore, setSelStore] = useState([]);
-  const [selCn, setSelCn] = useState([]);
+  const [selApp, setSelApp] = useState('');
+  const [selStore, setSelStore] = useState('');
+  const [selCh, setSelCh] = useState('');
+  const [selCn, setSelCn] = useState('');
+  const [selAg, setSelAg] = useState('');
   const [showNoise, setShowNoise] = useState(false);
   const [showTable, setShowTable] = useState(true);
   const [fileName, setFileName] = useState('');
@@ -74,66 +73,59 @@ export default function CreativeDashboard() {
           rev2: parseFloat(r.all_revenue_total_d2) || 0,
         }));
         setRows(cleaned);
-        // Auto-detect date range: default to last 7 days of data
         const days = cleaned.map(r => r.day).filter(Boolean).sort();
         if (days.length) {
           const maxD = days[days.length - 1];
           const [y, m, d] = maxD.split('-').map(Number);
-          const end = new Date(y, m - 1, d);
           const start = new Date(y, m - 1, d - 6);
           const fmt = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
           setStartDate(fmt(start));
-          setEndDate(fmt(end));
+          setEndDate(maxD);
         }
-        // Auto-select top spend channel (excluding Organic) and top spend app
-        const chSpend = {};
-        cleaned.forEach(r => { if (r.ch) chSpend[r.ch] = (chSpend[r.ch] || 0) + r.cost; });
-        const excludeCh = ['organic', 'google ads'];
-        const topChs = Object.entries(chSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n).filter(c => !excludeCh.includes(c.toLowerCase()));
-        setSelCh(topChs);
-        const appSpend = {};
-        cleaned.forEach(r => { if (r.app) appSpend[r.app] = (appSpend[r.app] || 0) + r.cost; });
-        const topApps = Object.entries(appSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n);
-        setSelApp(topApps);
-        setSelStore([...new Set(cleaned.map(r => r.store).filter(Boolean))].sort());
-        const cnSpend = {};
-        cleaned.forEach(r => { if (r.cn && !isNoise(r.cn)) cnSpend[r.cn] = (cnSpend[r.cn] || 0) + r.cost; });
-        const topCns = Object.entries(cnSpend).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n]) => n);
-        setSelCn(topCns);
+        // Reset all filters to (전체)
+        setSelApp('');
+        setSelStore('');
+        setSelCh('');
+        setSelCn('');
+        setSelAg('');
       }
     });
   };
 
-  // Rank channels & apps by spend within date range, take top 5
   const dateFiltered = useMemo(() => {
     if (!startDate || !endDate) return rows;
     return rows.filter(r => r.day >= startDate && r.day <= endDate);
   }, [rows, startDate, endDate]);
 
-  const channelsRanked = useMemo(() => {
-    const map = {};
-    dateFiltered.forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
-    const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-    setSelCh(prev => {
-      const valid = prev.filter(c => ranked.includes(c));
-      const excludeCh = ['organic', 'google ads'];
-      return valid.length ? valid : ranked.filter(c => !excludeCh.includes(c.toLowerCase()));
-    });
-    return ranked;
-  }, [dateFiltered]);
-
   const appsRanked = useMemo(() => {
     const map = {};
     dateFiltered.forEach(r => { if (r.app) map[r.app] = (map[r.app] || 0) + r.cost; });
-    const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-    setSelApp(prev => {
-      const valid = prev.filter(a => ranked.includes(a));
-      return valid.length ? valid : ranked;
-    });
-    return ranked;
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
   }, [dateFiltered]);
 
   const stores = useMemo(() => [...new Set(rows.map(r => r.store).filter(Boolean))].sort(), [rows]);
+
+  const channelsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered.filter(r => !selApp || r.app === selApp).forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selApp]);
+
+  const campaignsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => (!selCh || r.ch === selCh) && (!selApp || r.app === selApp))
+      .forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selCh, selApp]);
+
+  const adgroupsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => (!selCh || r.ch === selCh) && (!selCn || r.cn === selCn) && (!selApp || r.app === selApp))
+      .forEach(r => { if (r.ag && !isNoise(r.ag)) map[r.ag] = (map[r.ag] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selCh, selCn, selApp]);
 
   const maxDay = useMemo(() => {
     const days = rows.map(r => r.day).filter(Boolean).sort();
@@ -149,31 +141,20 @@ export default function CreativeDashboard() {
     setEndDate(maxDay);
   };
 
-  const campaignsRanked = useMemo(() => {
-    const map = {};
-    dateFiltered.filter(r => selCh.includes(r.ch)).forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
-    const ranked = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
-    setSelCn(ranked);
-    return ranked;
-  }, [dateFiltered, selCh]);
-
-  const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
-  const toggleAll = (setter, all, sel) => () => setter(sel.length === all.length ? [] : [...all]);
-
-  const { topCreatives, scatterData, trendData } = useMemo(() => {
-    if (!rows.length || !selCh.length) return { topCreatives: [], scatterData: [], trendData: [] };
+  const { topCreatives, trendData } = useMemo(() => {
+    if (!rows.length) return { topCreatives: [], trendData: [] };
 
     const filtered = rows.filter(r => {
       if (r.day < startDate || r.day > endDate) return false;
-      if (!selCh.includes(r.ch)) return false;
-      if (!selApp.includes(r.app)) return false;
-      if (!selStore.includes(r.store)) return false;
-      if (selCn.length && !selCn.includes(r.cn)) return false;
+      if (selApp && r.app !== selApp) return false;
+      if (selStore && r.store !== selStore) return false;
+      if (selCh && r.ch !== selCh) return false;
+      if (selCn && r.cn !== selCn) return false;
+      if (selAg && r.ag !== selAg) return false;
       if (!showNoise && isNoise(r.creative)) return false;
       return true;
     });
 
-    // Aggregate by creative
     const creativeMap = {};
     filtered.forEach(r => {
       const key = r.creative || 'Unknown';
@@ -184,29 +165,16 @@ export default function CreativeDashboard() {
       d.revenue += r.rev2;
     });
 
-    // Derived metrics
     const allCreatives = Object.values(creativeMap).map(c => ({
       ...c,
       cpi: c.installs > 0 ? c.spend / c.installs : Infinity,
       roas: c.spend > 0 ? c.revenue / c.spend : 0,
     }));
 
-    // Sort: descending by selected metric
     const sortFn = (a, b) => (b[sortMetric] || 0) - (a[sortMetric] || 0);
-
     const top = allCreatives.sort(sortFn).slice(0, topN);
     const topNames = new Set(top.map(c => c.name));
 
-    // Scatter data (all creatives with spend > 0)
-    const scatter = allCreatives.filter(c => c.spend > 0).map((c, i) => ({
-      name: c.name,
-      spend: c.spend,
-      revenue: c.revenue,
-      installs: c.installs,
-      isTop: topNames.has(c.name),
-    }));
-
-    // Daily trend for top creatives
     const dailyMap = {};
     filtered.filter(r => topNames.has(r.creative)).forEach(r => {
       const day = r.day;
@@ -218,38 +186,17 @@ export default function CreativeDashboard() {
     });
 
     const trend = Object.values(dailyMap).sort((a, b) => a.day.localeCompare(b.day));
+    return { topCreatives: top, trendData: trend };
+  }, [rows, startDate, endDate, topN, selApp, selStore, selCh, selCn, selAg, showNoise, sortMetric]);
 
-    return { topCreatives: top, scatterData: scatter, trendData: trend };
-  }, [rows, startDate, endDate, topN, selCh, selApp, selStore, selCn, showNoise, sortMetric]);
-
-  // Bar chart data (reversed for vertical layout - top item at top)
   const barData = useMemo(() => {
     return [...topCreatives].map((c, i) => ({
       name: c.name,
       displayName: c.name,
-      value: sortMetric === 'roas' ? c.roas * 100 : c[sortMetric],
+      value: c[sortMetric],
       fill: COLORS[i % COLORS.length],
     }));
   }, [topCreatives, sortMetric]);
-
-  const Chips = ({ label, items, sel, onToggle, onAll }) => (
-    <div className="mb-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold text-gray-600">{label} ({sel.length}/{items.length})</span>
-        <button onClick={onAll} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-          {sel.length === items.length ? '해제' : '전체'}
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map(v => (
-          <button key={v} onClick={() => onToggle(v)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${sel.includes(v) ? 'bg-blue-50 border-blue-300 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-            {v}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 
   const renderBarChart = () => {
     if (!barData.length) return null;
@@ -263,14 +210,11 @@ export default function CreativeDashboard() {
           <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={v => sortMetric === 'installs' ? fmtNum(v) : fmtWon(v)} />
+              tickFormatter={v => fmtMetric(v, sortMetric)} />
             <YAxis type="category" dataKey="displayName" width={200} stroke="#9ca3af" style={{ fontSize: '10px' }} />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
-              formatter={(v, name, props) => {
-                const label = sortMetric === 'installs' ? fmtNum(v) : fmtWon(v);
-                return [label, metricLabel];
-              }}
+              formatter={(v) => [fmtMetric(v, sortMetric), metricLabel]}
               labelFormatter={(label) => {
                 const item = barData.find(d => d.displayName === label);
                 return item ? item.name : label;
@@ -282,49 +226,6 @@ export default function CreativeDashboard() {
               ))}
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  };
-
-  const renderScatterChart = () => {
-    if (!scatterData.length) return null;
-    const maxSpend = Math.max(...scatterData.map(d => d.spend));
-    const maxRev = Math.max(...scatterData.map(d => d.revenue));
-    const maxAxis = Math.max(maxSpend, maxRev) * 1.1;
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-        <h3 className="text-sm font-bold text-gray-800 mb-1">Spend vs D+2 Revenue</h3>
-        <p className="text-xs text-gray-400 mb-3">버블 크기 = Installs / 대각선 위 = ROAS {'>'} 100%</p>
-        <ResponsiveContainer width="100%" height={400}>
-          <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis type="number" dataKey="spend" name="Spend" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={fmtWon} label={{ value: 'Spend', position: 'insideBottom', offset: -5, fontSize: 11, fill: '#9ca3af' }} />
-            <YAxis type="number" dataKey="revenue" name="D+2 Revenue" stroke="#9ca3af" style={{ fontSize: '11px' }}
-              tickFormatter={fmtWon} label={{ value: 'D+2 Revenue', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11, fill: '#9ca3af' }} />
-            <ZAxis type="number" dataKey="installs" range={[40, 400]} name="Installs" />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const d = payload[0].payload;
-                return (
-                  <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11, padding: '8px 12px', maxWidth: 300 }}>
-                    <p style={{ fontWeight: 600, marginBottom: 4, wordBreak: 'break-all' }}>{d.name}</p>
-                    <p>Spend: {fmtWon(d.spend)}</p>
-                    <p>D+2 Revenue: {fmtWon(d.revenue)}</p>
-                    <p>Installs: {fmtNum(d.installs)}</p>
-                    <p>ROAS: {d.spend > 0 ? ((d.revenue / d.spend) * 100).toFixed(1) + '%' : '-'}</p>
-                  </div>
-                );
-              }}
-            />
-            <ReferenceLine segment={[{ x: 0, y: 0 }, { x: maxAxis, y: maxAxis }]}
-              stroke="#ef4444" strokeDasharray="8 4" strokeWidth={1.5} />
-            <Scatter data={scatterData.filter(d => d.isTop)} fill="#2563eb" fillOpacity={0.7} />
-            <Scatter data={scatterData.filter(d => !d.isTop)} fill="#9ca3af" fillOpacity={0.3} />
-          </ScatterChart>
         </ResponsiveContainer>
       </div>
     );
@@ -342,7 +243,7 @@ export default function CreativeDashboard() {
           <LineChart data={trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="day" stroke="#9ca3af" style={{ fontSize: '11px' }} />
-            <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={sortMetric === 'installs' ? fmtNum : fmtWon} />
+            <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={v => fmtMetric(v, sortMetric)} />
             <Tooltip
               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11 }}
               content={({ active, payload, label }) => {
@@ -354,7 +255,7 @@ export default function CreativeDashboard() {
                     <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#374151' }}>{label}</p>
                     {items.map(p => (
                       <p key={p.dataKey} style={{ margin: '2px 0', color: p.stroke }}>
-                        {p.dataKey?.split('__')[0]}: {sortMetric === 'installs' ? fmtNum(p.value) : fmtWon(p.value)}
+                        {p.dataKey?.split('__')[0]}: {fmtMetric(p.value, sortMetric)}
                       </p>
                     ))}
                   </div>
@@ -387,9 +288,11 @@ export default function CreativeDashboard() {
               {METRIC_OPTIONS.map(s => (
                 <th key={s.key} onClick={() => setSortMetric(s.key)}
                   className="py-2 px-3 text-right font-semibold text-gray-600 cursor-pointer hover:text-blue-600 whitespace-nowrap">
-                  {s.label} {sortMetric === s.key ? (s.key === 'cpi' ? '▲' : '▼') : ''}
+                  {s.label} {sortMetric === s.key ? '▼' : ''}
                 </th>
               ))}
+              <th className="py-2 px-3 text-right font-semibold text-gray-600 whitespace-nowrap">CPI</th>
+              <th className="py-2 px-3 text-right font-semibold text-gray-600 whitespace-nowrap">ROAS</th>
             </tr>
           </thead>
           <tbody>
@@ -407,7 +310,7 @@ export default function CreativeDashboard() {
                     {c.name}
                   </td>
                   <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtWon(c.spend)}</td>
-                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtNum(c.installs)}</td>
+                  <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtCount(c.installs)}</td>
                   <td className="py-2 px-3 text-right text-gray-700 font-medium">{fmtWon(c.revenue)}</td>
                   <td className="py-2 px-3 text-right text-gray-700 font-medium">
                     {isFinite(c.cpi) && c.cpi > 0 ? Math.round(c.cpi).toLocaleString() + '원' : '-'}
@@ -424,11 +327,12 @@ export default function CreativeDashboard() {
     );
   };
 
+  const selectClass = "w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm";
+
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4" style={{ fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
       <div className="max-w-7xl mx-auto space-y-4">
 
-        {/* Header + Filters */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -456,17 +360,16 @@ export default function CreativeDashboard() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">시작일</label>
                   <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                    className={selectClass} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">종료일</label>
                   <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                    className={selectClass} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Top N</label>
-                  <select value={topN} onChange={e => setTopN(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
+                  <select value={topN} onChange={e => setTopN(Number(e.target.value))} className={selectClass}>
                     {[3, 5, 7, 10].map(n => <option key={n} value={n}>Top {n}</option>)}
                   </select>
                 </div>
@@ -482,38 +385,44 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">앱 (Spend Top 5)</label>
-                  <select multiple value={selApp} onChange={e => setSelApp([...e.target.selectedOptions].map(o => o.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">앱</label>
+                  <select value={selApp} onChange={e => { setSelApp(e.target.value); setSelCh(''); setSelCn(''); setSelAg(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
                     {appsRanked.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">스토어</label>
-                  <select multiple value={selStore} onChange={e => setSelStore([...e.target.selectedOptions].map(o => o.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                  <select value={selStore} onChange={e => setSelStore(e.target.value)} className={selectClass}>
+                    <option value="">(전체)</option>
                     {stores.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">채널 (Spend Top 5)</label>
-                  <select multiple value={selCh} onChange={e => setSelCh([...e.target.selectedOptions].map(o => o.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">채널</label>
+                  <select value={selCh} onChange={e => { setSelCh(e.target.value); setSelCn(''); setSelAg(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
                     {channelsRanked.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">캠페인 (Spend Top 5)</label>
-                  <select multiple value={selCn} onChange={e => setSelCn([...e.target.selectedOptions].map(o => o.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" style={{ minHeight: 80 }}>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">캠페인</label>
+                  <select value={selCn} onChange={e => { setSelCn(e.target.value); setSelAg(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
                     {campaignsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">광고 세트</label>
+                  <select value={selAg} onChange={e => setSelAg(e.target.value)} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {adgroupsRanked.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
               </div>
 
-              {/* Sort metric selector */}
               <div className="mb-4">
                 <span className="text-xs font-semibold text-gray-600 mb-1.5 block">정렬 기준</span>
                 <div className="flex flex-wrap gap-1.5">
@@ -528,7 +437,6 @@ export default function CreativeDashboard() {
                 </div>
               </div>
 
-              {/* Summary cards */}
               {topCreatives.length > 0 && (
                 <div>
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
@@ -544,7 +452,7 @@ export default function CreativeDashboard() {
                         <p className="text-xs font-medium text-gray-800 break-all mb-1 leading-tight">{c.name}</p>
                         <div className="flex gap-3 text-xs text-gray-500">
                           <span>Spend: <b className="text-gray-700">{fmtWon(c.spend)}</b></span>
-                          <span>Install: <b className="text-gray-700">{fmtNum(c.installs)}</b></span>
+                          <span>Install: <b className="text-gray-700">{fmtCount(c.installs)}</b></span>
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">
                           D+2 Rev: <b className="text-gray-700">{fmtWon(c.revenue)}</b>
@@ -558,7 +466,6 @@ export default function CreativeDashboard() {
           )}
         </div>
 
-        {/* Charts */}
         {topCreatives.length > 0 && (
           <>
             {renderBarChart()}
@@ -566,10 +473,8 @@ export default function CreativeDashboard() {
           </>
         )}
 
-        {/* Table */}
         {renderTable()}
 
-        {/* Empty state */}
         {!rows.length && (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <div className="text-5xl mb-3">&#x1F3AF;</div>
