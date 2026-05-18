@@ -8,6 +8,14 @@ const COLORS = ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#f59e0b','#10
 const NOISE_LIST = ['unknown','expired attributions','anonymous ips','malformed advertising id','untrusted devices'];
 const isNoise = (n) => !n || NOISE_LIST.includes(n.toLowerCase().trim());
 
+const fmtWon = (v) => {
+  if (v == null || !isFinite(v)) return '-';
+  const man = v / 10000;
+  if (man >= 10000) return (man / 10000).toFixed(1) + '억원';
+  if (man >= 1) return man.toFixed(0) + '만원';
+  return v.toFixed(0) + '원';
+};
+
 const METRICS = [
   { key:'d2', label:'D+2', days:2, bg:'bg-sky-100', border:'border-sky-500', text:'text-sky-800' },
   { key:'d7', label:'D+7', days:7, bg:'bg-cyan-100', border:'border-cyan-500', text:'text-cyan-800' },
@@ -23,9 +31,10 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState('2025-01-01');
   const [endDate, setEndDate] = useState('2025-12-31');
   const [topN, setTopN] = useState(5);
-  const [selCh, setSelCh] = useState([]);
-  const [selApp, setSelApp] = useState([]);
-  const [selOS, setSelOS] = useState([]);
+  const [selApp, setSelApp] = useState('');
+  const [selStore, setSelStore] = useState('');
+  const [selCh, setSelCh] = useState('');
+  const [selCn, setSelCn] = useState('');
   const [selMetrics, setSelMetrics] = useState(['d7','d14','d30','d60','d90','d120']);
   const [showNoise, setShowNoise] = useState(false);
   const [showTable, setShowTable] = useState(false);
@@ -40,7 +49,7 @@ export default function Dashboard() {
       complete: (res) => {
         const cleaned = res.data.map(r => ({
           app: r.app?.trim() || '',
-          os: r.os_name?.trim() || '',
+          store: r.app_store_type?.trim() || '',
           ch: r.channel?.trim() || '',
           cn: r.campaign_network?.trim() || '',
           day: r.day?.trim() || '',
@@ -54,19 +63,44 @@ export default function Dashboard() {
           r120: parseFloat(r.all_revenue_total_d120) || 0,
         }));
         setRows(cleaned);
-        setSelCh([...new Set(cleaned.map(r=>r.ch).filter(Boolean))].sort());
-        setSelApp([...new Set(cleaned.map(r=>r.app).filter(Boolean))].sort());
-        setSelOS([...new Set(cleaned.map(r=>r.os).filter(Boolean))].sort());
+        setSelApp(''); setSelStore(''); setSelCh(''); setSelCn('');
       }
     });
   };
 
-  const channels = useMemo(() => [...new Set(rows.map(r=>r.ch).filter(Boolean))].sort(), [rows]);
-  const apps = useMemo(() => [...new Set(rows.map(r=>r.app).filter(Boolean))].sort(), [rows]);
-  const osList = useMemo(() => [...new Set(rows.map(r=>r.os).filter(Boolean))].sort(), [rows]);
+  const dateFiltered = useMemo(() =>
+    rows.filter(r => r.day >= startDate && r.day <= endDate),
+  [rows, startDate, endDate]);
 
-  const toggle = (setter) => (v) => setter(p => p.includes(v) ? p.filter(x=>x!==v) : [...p,v]);
-  const toggleAll = (setter, all, sel) => () => setter(sel.length === all.length ? [] : [...all]);
+  const appsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered.forEach(r => { if (r.app) map[r.app] = (map[r.app] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered]);
+
+  const storesRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => !selApp || r.app === selApp)
+      .forEach(r => { if (r.store) map[r.store] = (map[r.store] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selApp]);
+
+  const channelsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => (!selApp || r.app === selApp) && (!selStore || r.store === selStore))
+      .forEach(r => { if (r.ch) map[r.ch] = (map[r.ch] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selApp, selStore]);
+
+  const campaignsRanked = useMemo(() => {
+    const map = {};
+    dateFiltered
+      .filter(r => (!selApp || r.app === selApp) && (!selStore || r.store === selStore) && (!selCh || r.ch === selCh))
+      .forEach(r => { if (r.cn && !isNoise(r.cn)) map[r.cn] = (map[r.cn] || 0) + r.cost; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  }, [dateFiltered, selApp, selStore, selCh]);
 
   const maxMonths = useMemo(() => {
     if (!rows.length) return {};
@@ -86,7 +120,7 @@ export default function Dashboard() {
   }, [rows]);
 
   const { topCampaigns, chartData } = useMemo(() => {
-    if (!rows.length || !selCh.length) return { topCampaigns:[], chartData:[] };
+    if (!rows.length) return { topCampaigns:[], chartData:[] };
     const NOW = new Date();
     const cohortOk = (mo, days) => {
       const [y,mn] = mo.split('-').map(Number);
@@ -97,9 +131,10 @@ export default function Dashboard() {
 
     const filtered = rows.filter(r => {
       if (r.day < startDate || r.day > endDate) return false;
-      if (!selCh.includes(r.ch)) return false;
-      if (!selApp.includes(r.app)) return false;
-      if (!selOS.includes(r.os)) return false;
+      if (selApp && r.app !== selApp) return false;
+      if (selStore && r.store !== selStore) return false;
+      if (selCh && r.ch !== selCh) return false;
+      if (selCn && r.cn !== selCn) return false;
       if (!showNoise && isNoise(r.cn)) return false;
       return true;
     });
@@ -136,7 +171,6 @@ export default function Dashboard() {
       return pt;
     });
 
-    // 실선→점선 연결: 마지막 완료 포인트 값을 점선에도 복사
     top.forEach(c => {
       METRICS.forEach(m => {
         let lastOkIdx = -1;
@@ -150,7 +184,7 @@ export default function Dashboard() {
     });
 
     return { topCampaigns: top, chartData: chart };
-  }, [rows, startDate, endDate, topN, selCh, selApp, selOS, showNoise]);
+  }, [rows, startDate, endDate, topN, selApp, selStore, selCh, selCn, showNoise]);
 
   const renderChart = (mk) => {
     const m = METRICS.find(x=>x.key===mk);
@@ -240,7 +274,7 @@ export default function Dashboard() {
                   <td rowSpan={active.length} className="py-1.5 px-3 font-medium text-gray-800 sticky left-0 bg-white z-10 align-top border-r border-gray-100"
                     style={{borderLeftColor:COLORS[i%COLORS.length], borderLeftWidth:3}}>
                     <span className="text-xs leading-tight break-all">{c.name}</span>
-                    <span className="block text-xs text-gray-400 mt-0.5">{(c.cost/1e6).toFixed(1)}M</span>
+                    <span className="block text-xs text-gray-400 mt-0.5">{fmtWon(c.cost)}</span>
                   </td>
                 )}
                 <td className="py-1.5 px-2 text-center text-gray-500 font-medium whitespace-nowrap border-r border-gray-100">{m.label}</td>
@@ -268,24 +302,7 @@ export default function Dashboard() {
     );
   };
 
-  const Chips = ({label, items, sel, onToggle, onAll}) => (
-    <div className="mb-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold text-gray-600">{label} ({sel.length}/{items.length})</span>
-        <button onClick={onAll} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-          {sel.length===items.length?'해제':'전체'}
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map(v=>(
-          <button key={v} onClick={()=>onToggle(v)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${sel.includes(v)?'bg-blue-50 border-blue-300 text-blue-800':'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-            {v}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  const selectClass = "w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm";
 
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif'}}>
@@ -309,17 +326,16 @@ export default function Dashboard() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">시작일</label>
                   <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                    className={selectClass} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">종료일</label>
                   <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+                    className={selectClass} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Top N</label>
-                  <select value={topN} onChange={e=>setTopN(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
+                  <select value={topN} onChange={e=>setTopN(Number(e.target.value))} className={selectClass}>
                     {[3,5,10,15,20].map(n=><option key={n} value={n}>Top {n}</option>)}
                   </select>
                 </div>
@@ -335,9 +351,36 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {apps.length > 1 && <Chips label="앱" items={apps} sel={selApp} onToggle={toggle(setSelApp)} onAll={toggleAll(setSelApp,apps,selApp)} />}
-              {osList.length > 1 && <Chips label="OS" items={osList} sel={selOS} onToggle={toggle(setSelOS)} onAll={toggleAll(setSelOS,osList,selOS)} />}
-              <Chips label="채널" items={channels} sel={selCh} onToggle={toggle(setSelCh)} onAll={toggleAll(setSelCh,channels,selCh)} />
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-[1fr_1fr_1fr_1.5fr] gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">앱</label>
+                  <select value={selApp} onChange={e => { setSelApp(e.target.value); setSelStore(''); setSelCh(''); setSelCn(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {appsRanked.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">스토어</label>
+                  <select value={selStore} onChange={e => { setSelStore(e.target.value); setSelCh(''); setSelCn(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {storesRanked.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">채널</label>
+                  <select value={selCh} onChange={e => { setSelCh(e.target.value); setSelCn(''); }} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {channelsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">캠페인</label>
+                  <select value={selCn} onChange={e => setSelCn(e.target.value)} className={selectClass}>
+                    <option value="">(전체)</option>
+                    {campaignsRanked.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
 
               <div className="mb-4">
                 <span className="text-xs font-semibold text-gray-600 mb-1.5 block">ROAS 지표</span>
@@ -367,7 +410,7 @@ export default function Dashboard() {
                         <p className="text-xs font-medium text-gray-800 break-all mb-0.5">
                           {c.name}
                         </p>
-                        <p className="text-sm font-bold text-gray-700">{(c.cost/1e6).toFixed(1)}M</p>
+                        <p className="text-sm font-bold text-gray-700">{fmtWon(c.cost)}</p>
                       </div>
                     ))}
                   </div>
@@ -389,7 +432,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <div className="text-5xl mb-3">📊</div>
             <h3 className="text-base font-semibold text-gray-700 mb-1">Adjust CSV를 업로드해주세요</h3>
-            <p className="text-sm text-gray-400">필수 컬럼: app, os_name, channel, campaign_network, day, network_cost, all_revenue_total_d2~d120</p>
+            <p className="text-sm text-gray-400">필수 컬럼: app, app_store_type, channel, campaign_network, day, network_cost, all_revenue_total_d2~d120</p>
           </div>
         )}
       </div>
